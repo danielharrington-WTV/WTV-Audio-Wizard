@@ -1,0 +1,197 @@
+html, body { height:100%; margin:0; overflow:hidden; }
+body { display:flex; flex-direction:column; background:#202226; color:#ededee; font-family:Arial,sans-serif; font-size:12px; }
+.heading { display:flex; align-items:center; justify-content:flex-end; gap:8px; flex-shrink:0; padding:4px 10px 2px; }
+.heading select { width:auto; min-width:0; height:22px; min-height:22px; margin-top:0; font-size:11px; padding:0 4px; }
+.tab-bar { display:flex; flex-shrink:0; gap:4px; padding:0 7px 6px; }
+.tab { flex:1 1 0; cursor:pointer; min-height:28px; padding:4px 7px; margin:0; background:#30343a; color:#ededee; border-radius:4px; font-size:12px; font-weight:bold; box-sizing:border-box; text-align:center; user-select:none; }
+.tab.active { background:#3d535f; color:white; }
+.tab:focus-visible { outline:1px solid #ededee; outline-offset:1px; }
+.tab-panel[hidden] { display:none !important; }
+h1 { font-size:15px; margin:0; }
+p { line-height:1.35; margin:4px 0; }
+.subtle { color:#b1b8c4; font-size:11px; }
+.main-hint { margin:0 0 6px; padding:6px 8px; background:#282b30; border-radius:4px; line-height:1.4; }
+.main-hint:empty { display:none; }
+.destination-folder-btn { margin:0 0 6px; padding:4px 8px; min-height:24px; font-size:11px; text-align:left; display:flex; align-items:center; overflow:hidden; white-space:nowrap; }
+.destination-folder-row { display:flex; align-items:stretch; margin:0 0 6px; }
+.destination-folder-row .destination-folder-btn { flex:1 1 0; width:auto; min-width:0; margin:0 6px 0 0; }
+.destination-folder-row .change-folder-btn { display:flex; align-items:center; justify-content:center; flex:0 0 auto; width:auto; margin:0; padding:4px 8px; min-height:24px; font-size:11px; }
+.destination-folder-name { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* Folder glyph drawn with two plain boxes (tab + body): no image or font
+   dependency, so it renders the same in every UXP build. */
+.folder-icon { position:relative; flex:0 0 14px; width:14px; height:11px; margin-right:6px; }
+.folder-icon-tab { position:absolute; left:0; top:0; width:6px; height:3px; background:#d9b45a; border-radius:1px 1px 0 0; }
+.folder-icon-body { position:absolute; left:0; top:2px; width:14px; height:9px; background:#d9b45a; border-radius:1px 2px 2px 2px; }
+[role="button"].is-disabled .folder-icon-tab, [role="button"].is-disabled .folder-icon-body { background:#6f7680; }
+/* Wraps panel-scroll so fade overlays can sit on its viewport without
+   blocking clicks (pointer-events:none on the overlays). */
+.scroll-area { flex:1 1 0; min-height:0; position:relative; display:flex; flex-direction:column; }
+.panel-scroll { flex:1 1 0; min-height:0; overflow-y:scroll; overflow-x:hidden; padding:0 7px; }
+/* A thin scrollbar is easy to miss (reported: a real screenshot where it
+   was the only sign more content existed below). Gradient fades plus a
+   bottom chevron show cutoff more clearly than the scrollbar alone. */
+.scroll-fade { position:absolute; left:0; right:0; pointer-events:none; opacity:0; transition:opacity .15s; z-index:1; }
+.scroll-fade-top { top:0; height:18px; background:linear-gradient(to bottom, #202226 0%, rgba(32,34,38,0) 100%); }
+.scroll-fade-bottom { bottom:0; height:24px; display:flex; align-items:flex-end; justify-content:center; background:linear-gradient(to top, #202226 0%, rgba(32,34,38,0) 100%); }
+.scroll-area.more-above .scroll-fade-top { opacity:1; }
+.scroll-area.more-below .scroll-fade-bottom { opacity:1; }
+.scroll-chevron { font-size:10px; line-height:1; color:#9aa0a8; padding-bottom:2px; animation:scrollChevronBounce 1.6s ease-in-out infinite; }
+@keyframes scrollChevronBounce { 0%, 100% { transform:translateY(0); } 50% { transform:translateY(3px); } }
+.section { margin-bottom:4px; background:#282b30; border-radius:4px; }
+.section-content { padding:2px 7px 6px; }
+label { display:block; margin:4px 0; }
+/* Explicit control height and no vertical padding keep UXP glyphs legible. */
+input:not([type=checkbox]) { box-sizing:border-box; height:30px; min-height:30px; padding:0 6px; font-size:12px; line-height:18px; width:100%; min-width:0; margin-top:3px; flex-shrink:0; }
+select { height:30px; min-height:30px; width:100%; min-width:0; margin-top:3px; font-size:12px; }
+.field-row { display:flex; align-items:center; justify-content:space-between; }
+.field-row span { flex:1 1 0; margin-right:5px; }
+.field-row input { width:72px; flex:0 0 72px; margin-top:0; }
+.preset-name-row span { flex:0 0 auto; white-space:nowrap; }
+.preset-name-row input { flex:1 1 auto; width:auto; }
+.field-row select { width:148px; flex:0 0 148px; margin-top:0; }
+#connectionSection .field-row span { flex:0 0 43px; }
+#connectionSection input { flex:1 1 0; width:100%; }
+.inline-options, .timing-row, .footer-actions { display:flex; align-items:center; }
+.inline-options label { margin-left:8px; }
+.timing-row label { flex:1 1 0; min-width:0; }
+.timing-row label:first-child { margin-right:8px; }
+/* All clickable actions are `<div role="button">`, not real `<button>`
+   elements -- a UXP/host regression paints native button chrome (a grey
+   rounded pill) over custom background/border CSS on real <button>/form
+   controls, ignoring appearance:none/border:none entirely (confirmed live
+   in Premiere; see main.js's makeButtonDiv() comment for citations and the
+   accessibility/disabled-state reimplementation this requires). Plain divs
+   aren't native form controls, so they're never subject to that chrome. */
+[role="button"] { cursor:pointer; min-height:28px; padding:4px 7px; margin:2px 0; width:100%; background:#3d535f; color:white; border-radius:4px; font-size:12px; box-sizing:border-box; text-align:center; user-select:none; }
+[role="button"]:focus-visible { outline:1px solid #ededee; outline-offset:1px; }
+.section-toggle { margin:0; padding:5px 7px; background:#30343a; text-align:left; font-weight:bold; }
+/* Steps 1-3 collapse into this one-line summary once step 3 is done (see
+   main.js's setCoreStepsOpen/action('apply')) -- their job is finished and
+   step 4/Fix a pop/Enhance low end are what's actually left to use, so
+   keeping all three expanded just adds scroll distance to reach them. */
+.section-toggle.nested { margin:2px 0; border-radius:3px; font-size:11px; padding:4px 7px; }
+/* Connection status is shown beside the header, not only inside the
+   expandable section, because connecting collapses that section (see
+   action('connect') in main.js) -- without this, there'd be no at-a-glance
+   way to tell "connected" apart from "never tried"/"failed" once collapsed. */
+.section-toggle-row { display:flex; align-items:center; background:#30343a; border-radius:4px; }
+.section-toggle-row .section-toggle { flex:1 1 0; width:auto; background:none; }
+.connection-status { display:flex; align-items:center; flex:0 0 auto; margin:0 8px; font-size:11px; color:#b1b8c4; white-space:nowrap; }
+.connection-dot { width:8px; height:8px; border-radius:50%; margin-right:5px; background:#a83d3d; flex-shrink:0; }
+.connection-status.connected { color:#8fd6a8; }
+.connection-status.connected .connection-dot { background:#3d8f6f; }
+.connection-status.connecting .connection-dot { background:#c9a13d; }
+.section-heading { margin:0; padding:5px 7px; background:#30343a; font-weight:bold; }
+.options-toggle { text-align:left; color:#d5dae2; background:#30343a; border-top:1px solid #383c42; margin-top:8px; }
+.options-toggle:first-child { margin-top:2px; border-top:none; }
+.options-reset-block { margin-top:16px; padding-top:12px; border-top:1px solid #383c42; }
+.options-reset-block .secondary { width:100%; text-align:center; }
+.options-reset-block .subtle { margin-top:8px; margin-bottom:0; }
+.secondary { background:#353b43; }
+/* Disabled actions use flat grey chrome instead of fading the enabled colors
+   (opacity made step buttons look "inactive" but still colored). Set by
+   makeButtonDiv() -> .is-disabled whenever main.js updateActions() or an
+   in-flight action() marks a div disabled: not connected, wrong workflow
+   step, busy, or cancel only enabled while busy. */
+[role="button"].is-disabled { cursor:default; background:#2a2d31 !important; color:#8a919a !important; }
+[role="button"].is-disabled:focus-visible { outline-color:#8a919a; }
+/* Color-coded, always-visible 1-4 workflow steps (see plugin/index.html's
+   Workflow section) so the sequence reads at a glance regardless of which
+   step text is currently showing. */
+.run-clean-dialogue { background:#2f6b8a; font-weight:bold; margin:4px 0 8px; }
+.step1 { background:#3d6fa5; }
+.step2 { background:#3d8f6f; }
+.step3 { background:#6f5aa8; }
+.step4 { background:#3d8f6f; } /* Conform & duck music: green (v0.8.1) */
+.step5 { background:#3d8f9a; }
+.restore-speech { background:#2f6b8a; } /* Restore Speech: same blue as Batch Process Dialogue */
+.mute-tool { background:#c9a227; color:#1b1d20; } /* Unmute / Select muted: yellow, dark text for contrast */
+/* Batch Process Dialogue's collapsible Processing menu (Main tab, 2026-09-29): the
+   steps Batch Process Dialogue runs, in pipeline order. Summary line shows while collapsed. */
+.processing-toggle { margin-top:-4px; color:#d5dae2; }
+.processing-summary { margin:2px 0 6px; font-size:11px; }
+.processing-section { padding:2px 4px 6px; }
+.processing-step { display:flex; align-items:center; margin:3px 0; font-size:11px; line-height:1.15; }
+.processing-step input[type=checkbox] { flex:0 0 auto; width:auto; min-height:0; height:auto; margin:0 4px 0 0; }
+.processing-model label { display:flex; align-items:center; flex:0 0 auto; margin:0 8px 0 0; }
+.processing-model select { flex:1 1 auto; width:auto; height:24px; min-height:24px; margin-top:0; font-size:11px; }
+.processing-warning { color:#e0b04a; }
+.auto-mute-row { display:flex; align-items:center; margin:0 0 8px; font-size:11px; }
+.auto-mute-row input[type=checkbox] { flex:0 0 auto; width:auto; min-height:0; height:auto; margin:0 4px 0 0; }
+/* Fix a pop shares a row with step 4 (see plugin/index.html): an
+   always-visible utility, not part of the numbered 1-4 sequence, so it
+   uses the same neutral shade as other secondary actions instead of a
+   step-N color. */
+.step-row { display:flex; align-items:stretch; }
+.step-row > [role="button"] { flex:1 1 0; width:auto; }
+.step-row > [role="button"]:not(:last-child) { margin-right:6px; }
+/* Step 4 shares a row with Fix a pop; ducking controls live on the Options
+   tab under the Ducking section. Per-button help used to live in "?"
+   popover toggles beside each button; replaced by a plain title="" tooltip
+   on the button itself (see plugin/index.html) -- simpler, and every
+   button gets one now, not just the ones that had a popover. */
+#dialogueTrackList {
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:1px 8px;
+  max-height:96px;
+  overflow-y:auto;
+  margin:2px 0 4px;
+  padding:3px 5px;
+  background:#25282c;
+  border:1px solid #383c42;
+  border-radius:3px;
+  box-sizing:border-box;
+}
+#dialogueTrackList label.track-check {
+  display:flex;
+  align-items:center;
+  margin:0;
+  min-width:0;
+  font-size:11px;
+  line-height:1.15;
+}
+#dialogueTrackList label.track-check input[type=checkbox] {
+  flex:0 0 auto;
+  width:auto;
+  min-height:0;
+  height:auto;
+  margin:0 4px 0 0;
+}
+#dialogueTrackList label.track-check span {
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.reference-row { display:flex; align-items:center; }
+.reference-row p { flex:1 1 0; min-width:0; }
+.reference-row [role="button"] { width:54px; flex:0 0 54px; margin-left:5px; }
+.status-footer { flex-shrink:0; padding:5px 9px; background:#30343a; }
+.progress-wrap { height:6px; background:#202226; border-radius:3px; margin:4px 0 6px; overflow:hidden; }
+.progress-wrap[hidden] { display:none !important; }
+.progress-bar { height:100%; width:0; background:#3d8f6f; border-radius:3px; transition:width .25s ease; }
+#status { margin:0 0 3px; max-height:50px; overflow-y:auto; }
+.footer-actions [role="button"] { flex:1 1 0; width:auto; }
+.footer-actions [role="button"]:first-child { margin-right:6px; }
+#copyFeedback:empty { display:none; }
+#modeHelp:empty { display:none; }
+/* Options tab: tighter rows so the Clean dialogue block isn't a long scroll.
+   Checkboxes sit in a two-column grid; explanations live in title tooltips. */
+#tabOptions label { margin:2px 0; }
+#tabOptions p.subtle { margin:2px 0 4px; }
+#tabOptions input:not([type=checkbox]), #tabOptions select { height:26px; min-height:26px; }
+#tabOptions .field-row { margin:3px 0; }
+.check-grid { display:flex; flex-direction:column; margin:4px 0; }
+.check-row { display:flex; flex-direction:row; flex-wrap:wrap; flex-shrink:0; }
+.check-row > label { flex:1 1 110px; padding-right:4px; }
+.check-grid label { display:flex; align-items:center; margin:2px 0; min-width:0; font-size:11px; line-height:1.15; }
+.check-grid label input[type=checkbox] { flex:0 0 auto; width:auto; min-height:0; height:auto; margin:0 4px 0 0; }
+
+/* Compact layout (2026-10-06): switched on only from the panel menu, which
+   offers every control hidden here (panel-menu.js). */
+.heading-connected { display:none; width:8px; height:8px; border-radius:50%; background:#8fd6a8; margin-right:auto; }
+body.compact.is-connected .heading-connected { display:block; }
+body.compact.is-connected:not(.show-connection) #connectionBlock { display:none; }
+body.compact #copyReport, body.compact #changeFolder { display:none; }
+body.compact #cancel.is-disabled { display:none; }
+body.compact .destination-folder-row .destination-folder-btn { margin-right:0; }

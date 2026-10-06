@@ -1,0 +1,11 @@
+{
+  "date": "2026-09-11",
+  "feature": "standalone dialogue richness",
+  "dsp_version": "parallel-body-v1",
+  "javascript": {"command": "node --test tests/*.test.cjs", "passed": 128, "failed": 0},
+  "python": {"command": "python -m pytest tests -q", "passed": 119, "failed": 0, "warnings": "Two existing Starlette/TestClient deprecations"},
+  "ui": {"kind": "Edge browser approximation with host stubs", "viewports": ["300x480", "280x280"], "horizontal_overflow": false, "richness_screenshot": "dialogue-richness-panel.png"},
+  "native_premiere_acceptance": "pending",
+  "real_dialogue_listening": "pending",
+  "package_zip_rebuilt": false
+}

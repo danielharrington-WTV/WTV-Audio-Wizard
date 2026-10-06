@@ -1,0 +1,6 @@
+# PyTorch (CUDA build) is installed separately by gpu_test.py from download.pytorch.org,
+# matched to your NVIDIA driver. Manual install example (driver >= 570, incl. RTX 50xx):
+#   pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cu128
+# torchaudio, espnet, einops and omegaconf are NOT needed (the few bits used are vendored).
+numpy>=1.24,<3
+soundfile>=0.12

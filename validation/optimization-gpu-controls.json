@@ -1,0 +1,49 @@
+{
+  "gap_urgenet": {
+    "cold_vs_cold_max_abs": 2.5590125005692244e-06,
+    "cold_vs_cold_rms": 5.171395471984864e-07,
+    "warm_vs_cold_rms": 5.183508648882653e-07
+  },
+  "mossformer2": {
+    "cold_vs_cold_max_abs": 0.0011133546940982342,
+    "cold_vs_cold_rms": 7.475591478671655e-05,
+    "warm_vs_cold_rms": 5.387468981797057e-05
+  },
+  "bandit-sfx": {
+    "wall_seconds": 7.8111570999608375,
+    "metrics": {
+      "elapsed_seconds": 3.332278799964115,
+      "audio_seconds": 1.0,
+      "channels": 1,
+      "chunk_seconds": 8,
+      "hop_seconds": 1,
+      "peak_allocated_mib": 956.8056640625,
+      "peak_reserved_mib": 1530.0,
+      "gpu": "NVIDIA GeForce RTX 5080",
+      "torch": "2.11.0+cu128",
+      "parameters": 19745008
+    },
+    "differences": {
+      "sfx": 0.0
+    }
+  },
+  "bandit-music-sfx": {
+    "wall_seconds": 7.964703399979044,
+    "metrics": {
+      "elapsed_seconds": 3.513661900011357,
+      "audio_seconds": 1.0,
+      "channels": 1,
+      "chunk_seconds": 8,
+      "hop_seconds": 1,
+      "peak_allocated_mib": 989.806640625,
+      "peak_reserved_mib": 1558.0,
+      "gpu": "NVIDIA GeForce RTX 5080",
+      "torch": "2.11.0+cu128",
+      "parameters": 28383848
+    },
+    "differences": {
+      "music": 0.0,
+      "sfx": 0.0
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "plugin_version": "0.3.1",
+  "service_version": "0.3.0",
+  "javascript_tests": 28,
+  "panel_mock_smoke": "passed, including copy success, token redaction, error preservation and manual fallback",
+  "track_naming_regressions": "missing and throwing APIs pass in both processing modes",
+  "premiere_host_acceptance": "reload and fresh batch required; not yet verified in installed host"
+}

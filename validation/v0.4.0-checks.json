@@ -1,0 +1,13 @@
+{
+  "version": "0.4.0",
+  "python_tests": 24,
+  "javascript_tests": 28,
+  "panel_smoke": "passed; selected GAP model submitted and copy-report checks passed",
+  "raw_dialogue_routing": "both models receive exact raw samples even when Bandit speech file is absent; model switch invalidates cache",
+  "real_gpu_tests": [
+    "MossFormer2 raw input HTTP round trip",
+    "GAP-URGENet raw input HTTP round trip",
+    "GAP-URGENet 10-second stereo"
+  ],
+  "premiere_host_acceptance": "reload and fresh short batch required; new selector not yet tested in installed Premiere"
+}

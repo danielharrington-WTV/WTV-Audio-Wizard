@@ -1,0 +1,9 @@
+{
+  "model": "GAP-URGENet",
+  "samples": 480000,
+  "sample_rate": 48000,
+  "channels": 2,
+  "elapsed_seconds": 12.392133600020315,
+  "peak_allocated_mib": 4668.42041015625,
+  "peak_reserved_mib": 9900.0
+}

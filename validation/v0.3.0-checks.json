@@ -1,0 +1,9 @@
+{
+  "version": "0.3.0",
+  "python_tests": 21,
+  "javascript_tests": 24,
+  "panel_mock_smoke": "passed",
+  "real_bandit_mossformer_pipeline": "passed",
+  "real_stereo_mossformer": "passed",
+  "premiere_host_acceptance": "outstanding"
+}

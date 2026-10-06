@@ -1,0 +1,50 @@
+{
+  "source": "genre_search_draft_1.wav",
+  "sidon_available": true,
+  "runs": [
+    {
+      "run": "first (loads Sidon)",
+      "status": "done",
+      "reused": false,
+      "seconds": 10.56,
+      "error": null
+    },
+    {
+      "run": "repeat (cached result)",
+      "status": "done",
+      "reused": true,
+      "seconds": 0.01,
+      "error": null
+    }
+  ],
+  "result": {
+    "samples": 1436636,
+    "sample_rate": 48000,
+    "channels": 2,
+    "enhancement": {
+      "model": "sidon-v0.1",
+      "samples": 1436636,
+      "sample_rate": 48000,
+      "channels": 2,
+      "dual_mono_processed_once": false,
+      "elapsed_seconds": 7.792706900043413,
+      "peak_allocated_mib": 2116.931640625,
+      "peak_reserved_mib": 2718.0,
+      "wet_mix": 1.0,
+      "input_source": "raw_audio"
+    },
+    "timings": {
+      "cleanup_seconds": 10.104643099941313,
+      "repair_seconds": 6.998889148235321e-07,
+      "mix_seconds": 0.11602329998277128,
+      "total_seconds": 10.230507900007069
+    },
+    "safety_gain_db": 0.0
+  },
+  "input_samples": 1436636,
+  "output_samples": 1436636,
+  "same_length": true,
+  "lag_ms": -5,
+  "finite": true,
+  "peak_dbfs": -2.0
+}

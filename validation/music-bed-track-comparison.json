@@ -1,0 +1,409 @@
+{
+  "settings": {
+    "target_dbfs": -20,
+    "target_mode": "peak",
+    "duck_db": 10,
+    "bed_compression": true
+  },
+  "dialogue_simulation": "35–65% of each segment at −20 dBFS (same as segment sim)",
+  "tracks": {
+    "ANW4290_New_Frontier": {
+      "file": "h:\\Dans Stuff\\WildTV\\Prairie Pursuit\\PP9001 Greg SpringBear\\Music\\ANW4290_013_New-Frontier-No-Strings.wav",
+      "basename": "ANW4290_013_New-Frontier-No-Strings.wav",
+      "duration_s": 135.58,
+      "sample_peak_dbfs": 2.89,
+      "active_rms_20ms_dbfs": -12.42,
+      "crest_db": 15.31,
+      "segments": [
+        {
+          "index": 1,
+          "time_s": [
+            0,
+            13.6
+          ],
+          "segment_peak_dbfs": 0.72,
+          "with_bed": {
+            "baseline_gain_db": -11.53,
+            "bed_mean_compression_db": -7.1,
+            "blocks_compressed": 673
+          },
+          "without_bed": {
+            "baseline_gain_db": -20.72
+          },
+          "lift_from_bed_db": 9.19
+        },
+        {
+          "index": 2,
+          "time_s": [
+            13.6,
+            27.1
+          ],
+          "segment_peak_dbfs": 1.88,
+          "with_bed": {
+            "baseline_gain_db": -11.55,
+            "bed_mean_compression_db": -6.93,
+            "blocks_compressed": 641
+          },
+          "without_bed": {
+            "baseline_gain_db": -21.88
+          },
+          "lift_from_bed_db": 10.33
+        },
+        {
+          "index": 3,
+          "time_s": [
+            27.1,
+            40.7
+          ],
+          "segment_peak_dbfs": 2.01,
+          "with_bed": {
+            "baseline_gain_db": -10.01,
+            "bed_mean_compression_db": -11.82,
+            "blocks_compressed": 678
+          },
+          "without_bed": {
+            "baseline_gain_db": -22.01
+          },
+          "lift_from_bed_db": 12
+        },
+        {
+          "index": 4,
+          "time_s": [
+            40.7,
+            54.2
+          ],
+          "segment_peak_dbfs": 2.89,
+          "with_bed": {
+            "baseline_gain_db": -10.89,
+            "bed_mean_compression_db": -11.78,
+            "blocks_compressed": 678
+          },
+          "without_bed": {
+            "baseline_gain_db": -22.89
+          },
+          "lift_from_bed_db": 12
+        },
+        {
+          "index": 5,
+          "time_s": [
+            54.2,
+            67.8
+          ],
+          "segment_peak_dbfs": 2.89,
+          "with_bed": {
+            "baseline_gain_db": -10.89,
+            "bed_mean_compression_db": -11.77,
+            "blocks_compressed": 678
+          },
+          "without_bed": {
+            "baseline_gain_db": -22.89
+          },
+          "lift_from_bed_db": 12
+        },
+        {
+          "index": 6,
+          "time_s": [
+            67.8,
+            81.4
+          ],
+          "segment_peak_dbfs": 2.89,
+          "with_bed": {
+            "baseline_gain_db": -11.76,
+            "bed_mean_compression_db": -11.6,
+            "blocks_compressed": 678
+          },
+          "without_bed": {
+            "baseline_gain_db": -22.89
+          },
+          "lift_from_bed_db": 11.12
+        },
+        {
+          "index": 7,
+          "time_s": [
+            81.4,
+            94.9
+          ],
+          "segment_peak_dbfs": 2.89,
+          "with_bed": {
+            "baseline_gain_db": -11.27,
+            "bed_mean_compression_db": -11.99,
+            "blocks_compressed": 678
+          },
+          "without_bed": {
+            "baseline_gain_db": -22.89
+          },
+          "lift_from_bed_db": 11.62
+        },
+        {
+          "index": 8,
+          "time_s": [
+            94.9,
+            108.5
+          ],
+          "segment_peak_dbfs": 2.89,
+          "with_bed": {
+            "baseline_gain_db": -10.94,
+            "bed_mean_compression_db": -12,
+            "blocks_compressed": 678
+          },
+          "without_bed": {
+            "baseline_gain_db": -22.89
+          },
+          "lift_from_bed_db": 11.95
+        },
+        {
+          "index": 9,
+          "time_s": [
+            108.5,
+            122
+          ],
+          "segment_peak_dbfs": 2.89,
+          "with_bed": {
+            "baseline_gain_db": -10.89,
+            "bed_mean_compression_db": -12,
+            "blocks_compressed": 678
+          },
+          "without_bed": {
+            "baseline_gain_db": -22.89
+          },
+          "lift_from_bed_db": 12
+        },
+        {
+          "index": 10,
+          "time_s": [
+            122,
+            135.6
+          ],
+          "segment_peak_dbfs": 2.89,
+          "with_bed": {
+            "baseline_gain_db": -10.89,
+            "bed_mean_compression_db": -8.9,
+            "blocks_compressed": 525
+          },
+          "without_bed": {
+            "baseline_gain_db": -22.89
+          },
+          "lift_from_bed_db": 12
+        }
+      ],
+      "aggregate": {
+        "baseline_with_bed": {
+          "mean": -11.06,
+          "stdev": 0.47
+        },
+        "baseline_without_bed": {
+          "mean": -22.48,
+          "stdev": 0.7
+        },
+        "lift_from_bed_db": {
+          "mean": 11.42,
+          "stdev": 0.91
+        },
+        "mean_blocks_compressed": 659,
+        "mean_bed_compression_db": -10.59
+      }
+    },
+    "ANW2865_Back_From_The_Dead_3": {
+      "file": "h:\\Dans Stuff\\WildTV\\Prairie Pursuit\\PP9001 Greg SpringBear\\Music\\ANW2865_038_Back-From-The-Dead-3.wav",
+      "basename": "ANW2865_038_Back-From-The-Dead-3.wav",
+      "duration_s": 125.29,
+      "sample_peak_dbfs": 2.34,
+      "active_rms_20ms_dbfs": -12.55,
+      "crest_db": 14.89,
+      "segments": [
+        {
+          "index": 1,
+          "time_s": [
+            0,
+            12.5
+          ],
+          "segment_peak_dbfs": 1.95,
+          "with_bed": {
+            "baseline_gain_db": -9.95,
+            "bed_mean_compression_db": -11.64,
+            "blocks_compressed": 623
+          },
+          "without_bed": {
+            "baseline_gain_db": -21.95
+          },
+          "lift_from_bed_db": 12
+        },
+        {
+          "index": 2,
+          "time_s": [
+            12.5,
+            25
+          ],
+          "segment_peak_dbfs": 2.28,
+          "with_bed": {
+            "baseline_gain_db": -10.28,
+            "bed_mean_compression_db": -11.84,
+            "blocks_compressed": 626
+          },
+          "without_bed": {
+            "baseline_gain_db": -22.28
+          },
+          "lift_from_bed_db": 12
+        },
+        {
+          "index": 3,
+          "time_s": [
+            25,
+            37.6
+          ],
+          "segment_peak_dbfs": 2.34,
+          "with_bed": {
+            "baseline_gain_db": -10.34,
+            "bed_mean_compression_db": -11.99,
+            "blocks_compressed": 626
+          },
+          "without_bed": {
+            "baseline_gain_db": -22.34
+          },
+          "lift_from_bed_db": 12
+        },
+        {
+          "index": 4,
+          "time_s": [
+            37.6,
+            50.1
+          ],
+          "segment_peak_dbfs": 1.59,
+          "with_bed": {
+            "baseline_gain_db": -9.59,
+            "bed_mean_compression_db": -12,
+            "blocks_compressed": 626
+          },
+          "without_bed": {
+            "baseline_gain_db": -21.59
+          },
+          "lift_from_bed_db": 12
+        },
+        {
+          "index": 5,
+          "time_s": [
+            50.1,
+            62.6
+          ],
+          "segment_peak_dbfs": 1.73,
+          "with_bed": {
+            "baseline_gain_db": -9.73,
+            "bed_mean_compression_db": -11.99,
+            "blocks_compressed": 626
+          },
+          "without_bed": {
+            "baseline_gain_db": -21.73
+          },
+          "lift_from_bed_db": 12
+        },
+        {
+          "index": 6,
+          "time_s": [
+            62.6,
+            75.1
+          ],
+          "segment_peak_dbfs": 1.35,
+          "with_bed": {
+            "baseline_gain_db": -9.35,
+            "bed_mean_compression_db": -11.87,
+            "blocks_compressed": 626
+          },
+          "without_bed": {
+            "baseline_gain_db": -21.35
+          },
+          "lift_from_bed_db": 12
+        },
+        {
+          "index": 7,
+          "time_s": [
+            75.1,
+            87.6
+          ],
+          "segment_peak_dbfs": 2.17,
+          "with_bed": {
+            "baseline_gain_db": -10.17,
+            "bed_mean_compression_db": -11.99,
+            "blocks_compressed": 626
+          },
+          "without_bed": {
+            "baseline_gain_db": -22.17
+          },
+          "lift_from_bed_db": 12
+        },
+        {
+          "index": 8,
+          "time_s": [
+            87.6,
+            100.2
+          ],
+          "segment_peak_dbfs": 2.02,
+          "with_bed": {
+            "baseline_gain_db": -10.02,
+            "bed_mean_compression_db": -11.99,
+            "blocks_compressed": 626
+          },
+          "without_bed": {
+            "baseline_gain_db": -22.02
+          },
+          "lift_from_bed_db": 12
+        },
+        {
+          "index": 9,
+          "time_s": [
+            100.2,
+            112.7
+          ],
+          "segment_peak_dbfs": 1.83,
+          "with_bed": {
+            "baseline_gain_db": -9.83,
+            "bed_mean_compression_db": -11.99,
+            "blocks_compressed": 626
+          },
+          "without_bed": {
+            "baseline_gain_db": -21.83
+          },
+          "lift_from_bed_db": 12
+        },
+        {
+          "index": 10,
+          "time_s": [
+            112.7,
+            125.3
+          ],
+          "segment_peak_dbfs": 1.59,
+          "with_bed": {
+            "baseline_gain_db": -9.59,
+            "bed_mean_compression_db": -11.56,
+            "blocks_compressed": 536
+          },
+          "without_bed": {
+            "baseline_gain_db": -21.59
+          },
+          "lift_from_bed_db": 12
+        }
+      ],
+      "aggregate": {
+        "baseline_with_bed": {
+          "mean": -9.88,
+          "stdev": 0.31
+        },
+        "baseline_without_bed": {
+          "mean": -21.89,
+          "stdev": 0.31
+        },
+        "lift_from_bed_db": {
+          "mean": 12,
+          "stdev": 0
+        },
+        "mean_blocks_compressed": 617,
+        "mean_bed_compression_db": -11.89
+      }
+    }
+  },
+  "comparison": {
+    "louder_master_peak_dbfs": "ANW4290_013_New-Frontier-No-Strings.wav",
+    "baseline_with_bed_mean_delta": 1.18,
+    "lift_from_bed_mean_delta": 0.58,
+    "bed_work_mean_compression_delta": -1.3
+  }
+}

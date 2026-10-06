@@ -1,0 +1,9 @@
+{
+  "model": "MossFormer2_SE_48K",
+  "samples": 480000,
+  "sample_rate": 48000,
+  "channels": 2,
+  "elapsed_seconds": 4.499363100039773,
+  "peak_allocated_mib": 250.8310546875,
+  "peak_reserved_mib": 258.0
+}

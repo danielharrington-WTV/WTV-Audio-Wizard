@@ -1,0 +1,154 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"></head>
+<body>
+<div class="heading"><span id="headingConnected" class="heading-connected" title="Connected to the service. Panel menu &gt; Connection settings shows the connection row."></span><select id="presetSelect" title="Project-type preset. Each preset keeps its own settings; switch any time." aria-label="Project preset"><option value="promo">Promo/Action</option><option value="interview">Interview</option><option value="camcorder">Camcorder</option><option value="natural">Natural (MossFormer)</option></select><span class="subtle">v0.8.2</span></div>
+<div class="tab-bar" role="tablist" aria-label="Panel sections">
+<div id="tabMainBtn" role="tab" class="tab active" aria-selected="true" aria-controls="tabMain" title="Workflow steps">Main</div>
+<div id="tabOptionsBtn" role="tab" class="tab" aria-selected="false" aria-controls="tabOptions" title="Settings and preferences">Options</div>
+</div>
+<div id="scrollArea" class="scroll-area">
+<div id="panelScroll" class="panel-scroll">
+<div id="tabMain" class="tab-panel" role="tabpanel" aria-labelledby="tabMainBtn">
+<p id="mainHint" class="main-hint subtle" role="status" aria-live="polite">Connect for dialogue cleanup.</p>
+<div class="destination-folder-row"><div id="openDestinationFolder" role="button" class="secondary destination-folder-btn" title="Open the export folder in File Explorer. When it reads No folder, click to choose one."><span class="folder-icon" aria-hidden="true"><span class="folder-icon-tab"></span><span class="folder-icon-body"></span></span><span id="destinationFolderName" class="destination-folder-name">No folder</span></div><div id="changeFolder" role="button" class="secondary change-folder-btn" title="Choose a different export folder for this project. The picker starts in the folder the project is saved in until you have chosen one. Your choice is remembered for this project. Files are saved in a WTVAudioWizard folder inside it.">Change</div></div>
+<div id="connectionBlock" class="section">
+<div class="section-toggle-row">
+<div id="toggleConnection" role="button" class="section-toggle" aria-controls="connectionSection" title="Show or hide the local service connection settings">Connection</div>
+<span id="connectionStatus" class="connection-status" role="status" aria-live="polite"><span class="connection-dot"></span><span id="connectionStatusText">Not connected</span></span>
+</div>
+<div id="connectionSection" class="section-content">
+<label class="field-row"><span>Service</span><input id="baseUrl" value="http://127.0.0.1:8756" aria-label="Local service URL"></label>
+<label class="field-row"><span>Token</span><input id="token" type="password" placeholder="From service window"></label>
+<div id="connect" role="button" title="Connect to the local WTVAudioWizard service">Connect</div>
+</div></div>
+<div class="section">
+<div class="section-content">
+<div id="runCleanDialogue" role="button" class="step run-clean-dialogue" aria-disabled="true" title="Export the selected dialogue, clean it on the service, and add the Clean dialogue tracks below the raw ones. If a run stops part-way, click again to continue where it left off.">Batch Process Dialogue</div>
+<div id="toggleProcessing" role="button" class="section-toggle nested processing-toggle" aria-controls="processingSection" aria-expanded="false" title="Show or hide the processing steps Batch Process Dialogue runs">+ Batch Process Options</div>
+<p id="processingSummary" class="subtle processing-summary" role="status"></p>
+<div id="processingSection" class="processing-section" style="display:none">
+<div class="processing-step processing-model"><label title="Run the neural cleanup model on the raw dialogue."><input id="enableEnhancer" type="checkbox" checked> Neural cleanup</label><select id="enhancer" aria-label="Neural cleanup model" title="Neural cleanup model"><option value="gap_urgenet">GAP-URGENet</option><option value="mossformer2">MossFormer2</option></select></div>
+<label class="processing-step" title="Per-clip speech leveling, compression and whisper lift, up to the Dialogue target in Options. Turn off to hear the model on its own."><input id="dialoguePostprocess" type="checkbox" checked> Level &amp; compress</label>
+<label class="processing-step" title="Reduce harsh S and T sounds."><input id="deess" type="checkbox" checked> De-ess</label>
+<label class="processing-step" title="Experimental. Repairs clicks and pops; may alter speech transients, so audition the result."><input id="deessDeclick" type="checkbox"> De-click &middot; Exp.</label>
+<label class="processing-step" title="Also extract an Ambience stem onto its own track."><input id="ambienceStem" type="checkbox"> Extract ambience stem</label>
+<label class="processing-step" title="Also extract a Music stem onto its own track."><input id="musicStem" type="checkbox"> Extract music stem</label>
+<p id="repairHelp" class="subtle" style="display:none">De-click may alter speech transients. Audition the result.</p>
+<p id="processingWarning" class="subtle processing-warning" style="display:none">Tick at least one step to run Batch Process Dialogue.</p>
+</div>
+<label class="auto-mute-row" title="On: Batch Process Dialogue mutes the raw clips or tracks it replaces, and Rebuild Speech mutes each original it rebuilds (Unmute reverts). Off: the raw audio stays audible so you can compare or mute it yourself."><input id="autoMute" type="checkbox" checked> Mute raw when done</label>
+<div class="step-row">
+<div id="musicPass" role="button" class="step step4" aria-disabled="true" title="On the selected music: duck it under the dialogue (Amplify keyframes), then normalize its level (Broadcast multiband compressor at -12 dB output gain, then a 3:1 peak-control compressor above -30 dB; limiters bypassed; duck keyframes preserved). All native effects, editable in Effect Controls.">Level &amp; duck music</div>
+<div id="fixPop" role="button" class="step secondary" aria-disabled="true" title="Select one audio clip on the timeline, park the playhead on the pop inside it, then click Fix pop at playhead. Works on any clip, with or without Clean dialogue; Undo reverts it.">Fix pop at playhead</div>
+</div>
+<div class="step-row">
+<div id="unmuteClips" role="button" class="step mute-tool" aria-disabled="true" title="Select one or more clips on the timeline, then click Unmute. Removes the -96 dB Amplify (and its ' · WTV muted' name tag) that Clean dialogue applies to a raw clip it silenced in place. Undo reverts it.">Unmute</div>
+<div id="selectMuted" role="button" class="step mute-tool" aria-disabled="true" title="Selects every clip on the active sequence that Clean dialogue muted with a -96 dB Amplify, across every audio track -- muted clips aren't otherwise obvious on the timeline.">Select muted</div>
+</div>
+<div class="step-row">
+<div id="extractAmbience" role="button" class="step secondary" aria-disabled="true" title="Select one or more clips on the timeline, then click Extract ambience. Runs the same background separation as the Ambience stem checkbox, on its own, without neural dialogue cleanup. Adds each result as a new clip on a dedicated Ambience track; the original clips and tracks are left untouched. Independent of the Clean dialogue workflow.">Extract ambience</div>
+<div id="verifyLoudness" role="button" class="step secondary" title="Measure the full audible mix's loudness and sample peaks; makes no level changes">Verify loudness</div>
+</div>
+<p id="loudnessResult" class="subtle" role="status" style="display:none"></p>
+<div class="step-row">
+<div id="restoreSpeech" role="button" class="step restore-speech" aria-disabled="true" title="Select dialogue clips, then click Rebuild Speech. Rebuilds the voice as clean, full-range speech, removing echo, room sound and noise. Best for: echoey rooms, distant camera mics, phone or Zoom recordings, noisy location interviews, muffled archive audio. Avoid for: singing or music under the voice, overlapping speakers, or when the room sound should stay. Results go on a new Rebuilt speech track and the originals are muted (Unmute reverts). Audition before delivery.">Rebuild Speech</div>
+<div id="checkQuality" role="button" class="step secondary" title="Scan only the selected dialogue audio clips with DNSMOS on the connected service and add red review markers. Requires a service connection; no audio changes.">Check dialogue quality</div>
+</div>
+<p id="qualityResult" class="subtle" role="status" style="display:none"></p>
+</div></div>
+</div>
+<div id="tabOptions" class="tab-panel" role="tabpanel" aria-labelledby="tabOptionsBtn" hidden>
+<div class="section">
+<div class="section-content">
+<div id="toggleCleanDialogue" role="button" class="section-toggle nested options-toggle" aria-controls="cleanDialogueSection" aria-expanded="false" title="Show or hide Clean dialogue settings">+ Clean dialogue</div>
+<div id="cleanDialogueSection" style="display:none">
+<label class="field-row"><span>Source</span><select id="mode" title="Per clip cleans each selected clip separately; Full sequence renders the whole dialogue mix."><option value="per_clip">Per clip</option><option value="full_sequence">Full sequence</option></select></label>
+<div class="check-grid">
+<div class="check-row">
+<label id="selectionRow" title="Only process dialogue clips that are selected on the timeline."><input id="selectedDialogue" type="checkbox" checked> Selected clips only</label>
+<label title="Edit the active sequence directly instead of a clone."><input id="processInPlace" type="checkbox" checked> Process in place</label>
+</div>
+</div>
+<label title="Per clip only. Process extra source audio for later trims and crossfades; visible cuts stay in place. Unavailable handles are reported."><input id="handlesEnabled" type="checkbox"> Add clip handles</label>
+<label class="field-row"><span>Seconds per side</span><input id="handleSeconds" type="number" value="0.5" min="0.01" max="2" step="0.1" disabled title="Requested handles on each side, limited by available source media and timeline zero."></label>
+<p id="modeHelp" class="subtle">Select dialogue on separate tracks; leave music unselected.</p>
+</div>
+<div id="toggleLevelsStems" role="button" class="section-toggle nested options-toggle" aria-controls="levelsStemsSection" aria-expanded="false" title="Show or hide stem level targets">+ Levels &amp; stems</div>
+<div id="levelsStemsSection" style="display:none">
+<p id="settingsSource" class="subtle">Factory defaults</p>
+<label class="field-row"><span id="dialogueLabel">Dialogue · dBFS</span><input id="dialogue" type="number" value="-12" min="-70" max="-6"></label>
+<label class="field-row"><span id="effectsLabel">Ambience · dBFS</span><input id="effects" type="number" value="-18" min="-70" max="-6"></label>
+<p id="levelHelp" class="subtle"></p>
+<p class="subtle">Extraction creates new stems. Bandit runs only for checked stems.</p>
+<div id="reset" role="button" class="secondary" title="Reset dialogue cleanup and level/stem targets to factory defaults for the current preset only (not other Options, like mode or Process in place, and not the other presets)">Reset targets (this preset)</div>
+</div>
+<div id="toggleDucking" role="button" class="section-toggle nested options-toggle" aria-controls="duckingSection" aria-expanded="false" title="Show or hide music ducking settings">+ Ducking</div>
+<div id="duckingSection" style="display:none">
+<div id="musicReference" style="display:none">
+<label class="field-row"><span>Duck against</span><select id="duckAgainst" disabled><option value="clean">Clean dialogue</option><option value="tracks">Choose tracks</option></select></label>
+<div id="dialogueTrackList" style="display:none" aria-label="Dialogue reference tracks"></div>
+<div class="reference-row"><p id="dialogueReferenceSummary" class="subtle" role="status">Clean dialogue</p><div id="refreshDialogueTracks" role="button" class="secondary" aria-disabled="true" title="Refresh the list of dialogue tracks available to duck music against">Refresh</div></div>
+</div>
+<div id="duckingLevelOptions" style="display:none" aria-hidden="true">
+<label class="field-row"><span id="musicLabel">Music baseline · dBFS</span><input id="music" type="number" value="-28" min="-70" max="-6"></label>
+<label><input id="compressMusicBed" type="checkbox" checked> Compress music bed (peak-only) before normalize</label>
+</div>
+<p class="subtle">Relative duck only: pulls selected music down by Duck dB while dialogue is present. Set music level in the timeline first; this pass does not measure or normalize the bed. Existing Amplify effects on selected music are replaced, including manually added ones.</p>
+<label class="field-row"><span>Duck · dB</span><input id="duck" type="number" value="10" min="0" max="30"></label>
+<label class="field-row"><span>Speech floor · dBFS</span><input id="speechThreshold" type="number" value="-40" min="-60" max="-15"></label>
+<p class="subtle">Lower detects quieter speech; higher ignores more background noise.</p>
+<div class="timing-row"><label>Attack · ms<input id="attack" type="number" value="200" min="10" max="1000"></label><label>Release · ms<input id="release" type="number" value="1200" min="50" max="3000"></label></div>
+<label><input id="stripMusicVolume" type="checkbox" checked> Remove clip Volume before ducking</label>
+<p class="subtle">Removes the native Volume effect (including keyframes) on selected music so only Amplify controls level and ducking. Uncheck to keep existing Volume fades and stack ducking on top.</p>
+<p id="duckHelp" class="subtle"></p>
+<label><input id="duckEffects" type="checkbox"> Also duck extracted ambience</label>
+</div>
+<div id="toggleLoudness" role="button" class="section-toggle nested options-toggle" aria-controls="loudnessSection" aria-expanded="false" title="Show or hide loudness verification settings">+ Loudness verification</div>
+<div id="loudnessSection" style="display:none">
+<p class="subtle">Full audible mix</p>
+<label class="field-row"><span>Target · LUFS</span><input id="loudnessTarget" type="number" min="-70" max="0" value="-24"></label>
+<label class="field-row"><span>Tolerance · LU</span><input id="loudnessTolerance" type="number" min="0" max="10" step="0.1" value="1"></label>
+<label class="field-row"><span>Flag peaks over · dBFS</span><input id="peakFlag" type="number" min="-40" max="0" step="0.1" value="-6"></label>
+<label class="field-row"><span>Merge within · s</span><input id="peakMerge" type="number" min="0" max="30" step="0.1" value="2"></label>
+<label><input id="peakMarkers" type="checkbox" checked> Add sequence markers at flagged peaks</label>
+<p class="subtle">Every sample over the flag level is reported, not just the loudest; hits within the merge window count as one event. Markers named "WTV peak" are replaced on each run. Choose your delivery target. Sample peak is not true peak; this is not a delivery compliance certificate.</p>
+</div>
+<div id="toggleQuality" role="button" class="section-toggle nested options-toggle" aria-controls="qualitySection" aria-expanded="false" title="Show or hide dialogue quality settings">+ Dialogue quality</div>
+<div id="qualitySection" style="display:none">
+<label class="field-row"><span>Flag below</span><input id="qualityThreshold" type="number" value="1.5" min="1" max="5" step="0.1" title="DNSMOS overall score threshold. Default 1.5; higher flags more audio. This is a review preference, not a broadcast standard."></label>
+<p class="subtle">Checks selected audio clips and adds red review markers.</p>
+</div>
+<div class="options-reset-block">
+<div id="togglePresets" role="button" class="section-toggle nested options-toggle" aria-controls="presetsSection" aria-expanded="false" title="Show or hide creating and deleting your own presets">+ Presets</div>
+<div id="presetsSection" style="display:none">
+<label class="field-row preset-name-row"><span>Preset name</span><input id="newPresetName" type="text" maxlength="40" placeholder="e.g. Podcast" title="Name for a new preset (up to 40 characters)"></label>
+<div class="step-row"><div id="createPreset" role="button" class="secondary" title="Save the current settings as a new preset with the name above, and switch to it">Save as new preset</div><div id="deletePreset" role="button" class="secondary" aria-disabled="true" title="Only presets you created can be deleted.">Delete this preset</div></div>
+<p class="subtle">New presets copy the current settings and appear in the preset menu at the top. Built-in presets can't be deleted.</p>
+</div>
+<div class="step-row"><div id="saveSettings" role="button" class="secondary" title="Save the current settings to a file">Save settings</div><div id="loadSettings" role="button" class="secondary" title="Load settings from a previously saved file">Load settings</div></div>
+<p class="subtle">Valid changes are remembered automatically. Save named files to keep reusable presets. Connection details and sequence track choices stay separate.</p>
+<div id="resetAllOptions" role="button" class="secondary" title="Reset every setting on this preset to its factory defaults. Other presets are untouched.">Reset this preset to defaults</div>
+<p class="subtle">Clean dialogue, levels, ducking, and panel-only options. Service URL, token, and per-sequence duck track picks are unchanged.</p>
+<div id="toggleChangedSettings" role="button" class="section-toggle nested options-toggle" aria-controls="changedSettingsSection" aria-expanded="false" title="List which of this preset's settings differ from factory defaults">+ Changed from defaults</div>
+<div id="changedSettingsSection" style="display:none">
+<p id="changedSettingsList" class="subtle">No changes from factory defaults.</p>
+</div>
+</div>
+</div></div>
+</div>
+</div>
+<div class="scroll-fade scroll-fade-top" aria-hidden="true"></div>
+<div class="scroll-fade scroll-fade-bottom" aria-hidden="true"><span class="scroll-chevron">&#9662;</span></div>
+</div>
+<div class="status-footer">
+<p id="status" role="status">Connect for dialogue cleanup.</p>
+<div id="progressWrap" class="progress-wrap" hidden>
+<div id="progressBar" class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+</div>
+<p id="batchEstimate" class="subtle" hidden aria-live="off"></p>
+<div class="footer-actions"><div id="copyReport" role="button" class="secondary" title="Copy a diagnostic report to the clipboard">Copy report</div><div id="cancel" role="button" class="secondary" aria-disabled="true" title="Cancel the operation in progress">Cancel</div></div>
+<p id="copyFeedback" class="subtle" role="status"></p>
+<textarea id="reportText" readonly aria-label="Diagnostic or click/pop report" style="display:none;width:100%;height:90px;"></textarea>
+</div>
+<script src="main.js"></script>
+</body></html>

@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "stems": [
+    {
+      "name": "dialogue",
+      "target": -12,
+      "duck": false
+    },
+    {
+      "name": "music",
+      "target": -28,
+      "duck": true
+    },
+    {
+      "name": "effects",
+      "target": -18,
+      "duck": false
+    }
+  ],
+  "duck_db": 10,
+  "attack_ms": 200,
+  "release_ms": 1200,
+  "enhancer": "gap_urgenet",
+  "separate_ambience": false,
+  "separate_music": false,
+  "deess_declick": false,
+  "dialogue_postprocess": true,
+  "deess": true
+}

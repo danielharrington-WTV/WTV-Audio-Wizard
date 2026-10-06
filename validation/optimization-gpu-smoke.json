@@ -1,0 +1,117 @@
+{
+  "gap_urgenet-cold": {
+    "worker_reused": false,
+    "wall_seconds": 20.35090780002065,
+    "metrics": {
+      "model": "GAP-URGENet",
+      "samples": 48000,
+      "sample_rate": 48000,
+      "channels": 1,
+      "elapsed_seconds": 14.353934399958234,
+      "peak_allocated_mib": 4668.42041015625,
+      "peak_reserved_mib": 9900.0
+    }
+  },
+  "gap_urgenet-warm": {
+    "worker_reused": true,
+    "wall_seconds": 5.17660419997992,
+    "metrics": {
+      "model": "GAP-URGENet",
+      "samples": 48000,
+      "sample_rate": 48000,
+      "channels": 1,
+      "elapsed_seconds": 5.169612600002438,
+      "peak_allocated_mib": 4667.74951171875,
+      "peak_reserved_mib": 9900.0
+    }
+  },
+  "gap_urgenet-comparison": {
+    "max_abs_difference": 2.407265128567815e-06,
+    "samples": 48000,
+    "finite": true
+  },
+  "mossformer2-cold": {
+    "worker_reused": false,
+    "wall_seconds": 19.507375000044703,
+    "metrics": {
+      "model": "MossFormer2_SE_48K",
+      "samples": 48000,
+      "sample_rate": 48000,
+      "channels": 1,
+      "elapsed_seconds": 11.741000999987591,
+      "peak_allocated_mib": 250.8310546875,
+      "peak_reserved_mib": 258.0
+    }
+  },
+  "mossformer2-warm": {
+    "worker_reused": true,
+    "wall_seconds": 0.1994997999863699,
+    "metrics": {
+      "model": "MossFormer2_SE_48K",
+      "samples": 48000,
+      "sample_rate": 48000,
+      "channels": 1,
+      "elapsed_seconds": 0.19305649999296293,
+      "peak_allocated_mib": 250.8310546875,
+      "peak_reserved_mib": 258.0
+    }
+  },
+  "mossformer2-comparison": {
+    "max_abs_difference": 0.0008896626532077789,
+    "samples": 48000,
+    "finite": true
+  },
+  "bandit-all": {
+    "worker_reused": false,
+    "wall_seconds": 17.699695700022858,
+    "metrics": {
+      "elapsed_seconds": 7.9479493999970146,
+      "audio_seconds": 1.0,
+      "channels": 1,
+      "chunk_seconds": 8,
+      "hop_seconds": 1,
+      "peak_allocated_mib": 1022.4404296875,
+      "peak_reserved_mib": 1584.0,
+      "gpu": "NVIDIA GeForce RTX 5080",
+      "torch": "2.11.0+cu128",
+      "parameters": 37022688
+    }
+  },
+  "bandit-music": {
+    "worker_reused": false,
+    "wall_seconds": 14.679921799979638,
+    "metrics": {
+      "elapsed_seconds": 7.181131999997888,
+      "audio_seconds": 1.0,
+      "channels": 1,
+      "chunk_seconds": 8,
+      "hop_seconds": 1,
+      "peak_allocated_mib": 956.8056640625,
+      "peak_reserved_mib": 1530.0,
+      "gpu": "NVIDIA GeForce RTX 5080",
+      "torch": "2.11.0+cu128",
+      "parameters": 19745008
+    }
+  },
+  "bandit-music-warm": {
+    "worker_reused": true,
+    "wall_seconds": 4.926221799978521,
+    "metrics": {
+      "elapsed_seconds": 4.919332300021779,
+      "audio_seconds": 1.0,
+      "channels": 1,
+      "chunk_seconds": 8,
+      "hop_seconds": 1,
+      "peak_allocated_mib": 956.7998046875,
+      "peak_reserved_mib": 1530.0,
+      "gpu": "NVIDIA GeForce RTX 5080",
+      "torch": "2.11.0+cu128",
+      "parameters": 19745008
+    }
+  },
+  "bandit-comparison": {
+    "selected_vs_all_max_abs": 0.0,
+    "warm_vs_cold_max_abs": 0.0
+  },
+  "worker_released": true
+}

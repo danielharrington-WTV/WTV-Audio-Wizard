@@ -1,0 +1,29 @@
+{
+  "version": "0.7.0",
+  "date": "2026-09-09",
+  "python_tests": {
+    "passed": 79,
+    "warnings": 2
+  },
+  "javascript_tests": {
+    "passed": 61
+  },
+  "panel_smoke": "passed",
+  "browser_layout": "passed at 300x480 and 280x280",
+  "gpu_tests": [
+    "optimization-gpu-smoke.json",
+    "optimization-gpu-controls.json",
+    "optimization-service-smoke.json"
+  ],
+  "native_premiere_acceptance": "outstanding",
+  "music_ducking_user_report": "root cause found and fixed 2026-09-09: plugin/music-effects.js called getParamCount()/getParam() directly on the component returned by AudioFilterFactory.createComponentByDisplayName(), which is a bare AudioFilterComponent handle with neither method until it is actually appended into the clip's AudioComponentChain (matches the live error 'component.getParamCount is not a function', and Adobe's own type declarations document AudioFilterComponent as having zero methods vs. Component -- returned by AudioComponentChain.getComponentAtIndex() -- which does). Fixed by splitting prepare() into createComponent() (factory call only), installed() (re-fetch from the chain after the append transaction commits) and configure() (reads/builds keyframes on the now-installed Component); call sites in music-pass.js now run two transactions (append effect, then commit keyframes) instead of one. Mocks in tests/music-pass.test.cjs previously gave the factory-created handle full methods immediately (an idealized/incorrect shape) and could not have caught this; mocks now model the same handle/installed split, plus a new explicit regression test. Real-Premiere confirmation from the user is still needed.",
+  "precision_and_overlap": "unchanged",
+  "worker_test_processes": "released",
+  "deferred": [
+    "streaming 4x peak analysis",
+    "history indexes",
+    "automatic cache eviction",
+    "stage-grouped mixed batches",
+    "GPU precision/batching/compile experiments"
+  ]
+}

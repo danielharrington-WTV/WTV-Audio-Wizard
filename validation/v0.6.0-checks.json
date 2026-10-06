@@ -1,0 +1,9 @@
+{
+  "version": "0.6.0",
+  "python_tests": 41,
+  "javascript_tests": 49,
+  "panel_smoke": "passed, including selected dialogue and music action",
+  "native_music_pass": "implemented with scratch render calibration, native effect keyframe readback and ownership guard",
+  "premiere_host_acceptance": "outstanding; runtime calibration before Apply",
+  "gpu": "No new model execution; music analysis is CPU-only"
+}

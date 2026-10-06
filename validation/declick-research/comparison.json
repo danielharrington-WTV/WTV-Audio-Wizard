@@ -1,0 +1,35 @@
+{
+  "fixture": "clip-002-dialogue_ORIGINAL_full.wav",
+  "sample_rate": 48000,
+  "samples": 728728,
+  "channels": 2,
+  "pop_vicinity_seconds": [
+    12.0,
+    12.3
+  ],
+  "comparison": "click repair only; production de-essing excluded",
+  "limitations": "One fixture; changes outside pop are not confirmed false positives; no listening or clean reference score. Fewer changes alone does not establish better pop removal.",
+  "results": {
+    "wtv_click_only": {
+      "changed_events": 27,
+      "changed_samples": 1200,
+      "outside_pop_changed_samples": 886,
+      "outside_difference_rms": 0.0019468930549919605,
+      "pop_difference_rms": 0.038942113518714905
+    },
+    "ffmpeg_save_t2": {
+      "changed_events": 3076,
+      "changed_samples": 37580,
+      "outside_pop_changed_samples": 37041,
+      "outside_difference_rms": 0.0029310386162251234,
+      "pop_difference_rms": 0.00474735489115119
+    },
+    "ffmpeg_save_t6": {
+      "changed_events": 37,
+      "changed_samples": 61,
+      "outside_pop_changed_samples": 57,
+      "outside_difference_rms": 6.865091563668102e-05,
+      "pop_difference_rms": 0.00013851681433152407
+    }
+  }
+}

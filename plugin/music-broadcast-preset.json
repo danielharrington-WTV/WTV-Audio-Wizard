@@ -1,0 +1,534 @@
+{
+  "name": "Broadcast",
+  "output_gain_db": -12,
+  "host": "Premiere Pro 26.2.2",
+  "match": "3981e750-c8ae-40a2-889f-41a01c7efa03",
+  "display": "Multiband Compressor",
+  "params": [
+    {
+      "index": 0,
+      "name": "Bypass",
+      "value": false
+    },
+    {
+      "index": 1,
+      "name": "Output Gain",
+      "value": 0.1666666716337204
+    },
+    {
+      "index": 2,
+      "name": "Threshold 1",
+      "value": 0.6633332967758179
+    },
+    {
+      "index": 3,
+      "name": "Threshold 2",
+      "value": 0.7066667079925537
+    },
+    {
+      "index": 4,
+      "name": "Threshold 3",
+      "value": 0.5866667032241821
+    },
+    {
+      "index": 5,
+      "name": "Threshold 4",
+      "value": 0.5833333134651184
+    },
+    {
+      "index": 6,
+      "name": "Ratio 1",
+      "value": 0.06896551698446274
+    },
+    {
+      "index": 7,
+      "name": "Ratio 2",
+      "value": 0.03448275849223137
+    },
+    {
+      "index": 8,
+      "name": "Ratio 3",
+      "value": 0.03448275849223137
+    },
+    {
+      "index": 9,
+      "name": "Ratio 4",
+      "value": 0.06896551698446274
+    },
+    {
+      "index": 10,
+      "name": "Attack 1",
+      "value": 0.0020000000949949026
+    },
+    {
+      "index": 11,
+      "name": "Attack 2",
+      "value": 0.0020000000949949026
+    },
+    {
+      "index": 12,
+      "name": "Attack 3",
+      "value": 0.0020000000949949026
+    },
+    {
+      "index": 13,
+      "name": "Attack 4",
+      "value": 0.0020000000949949026
+    },
+    {
+      "index": 14,
+      "name": "Release 1",
+      "value": 0.019999999552965164
+    },
+    {
+      "index": 15,
+      "name": "Release 2",
+      "value": 0.019999999552965164
+    },
+    {
+      "index": 16,
+      "name": "Release 3",
+      "value": 0.019999999552965164
+    },
+    {
+      "index": 17,
+      "name": "Release 4",
+      "value": 0.019999999552965164
+    },
+    {
+      "index": 18,
+      "name": "Gain 1",
+      "value": 0.5277777910232544
+    },
+    {
+      "index": 19,
+      "name": "Gain 2",
+      "value": 0.5
+    },
+    {
+      "index": 20,
+      "name": "Gain 3",
+      "value": 0.5
+    },
+    {
+      "index": 21,
+      "name": "Gain 4",
+      "value": 0.5833333134651184
+    },
+    {
+      "index": 22,
+      "name": "Global spectrum",
+      "value": 0
+    },
+    {
+      "index": 23,
+      "name": "Input spectrum",
+      "value": 0
+    },
+    {
+      "index": 24,
+      "name": "Link band controls",
+      "value": 0
+    },
+    {
+      "index": 25,
+      "name": "Bypass 1",
+      "value": 0
+    },
+    {
+      "index": 26,
+      "name": "Bypass 2",
+      "value": 0
+    },
+    {
+      "index": 27,
+      "name": "Bypass 3",
+      "value": 0
+    },
+    {
+      "index": 28,
+      "name": "Bypass 4",
+      "value": 0
+    },
+    {
+      "index": 29,
+      "name": "Solo 1",
+      "value": 0
+    },
+    {
+      "index": 30,
+      "name": "Solo 2",
+      "value": 0
+    },
+    {
+      "index": 31,
+      "name": "Solo 3",
+      "value": 0
+    },
+    {
+      "index": 32,
+      "name": "Solo 4",
+      "value": 0
+    },
+    {
+      "index": 33,
+      "name": "CrossOver Q",
+      "value": 0
+    },
+    {
+      "index": 34,
+      "name": "Cutoff 1",
+      "value": 0.005855855997651815
+    },
+    {
+      "index": 35,
+      "name": "Cutoff 2",
+      "value": 0.056406404823064804
+    },
+    {
+      "index": 36,
+      "name": "Cutoff 3",
+      "value": 0.34484484791755676
+    },
+    {
+      "index": 37,
+      "name": "Band 1 Bypass",
+      "value": 0
+    },
+    {
+      "index": 38,
+      "name": "Band 2 Bypass",
+      "value": 0
+    },
+    {
+      "index": 39,
+      "name": "Band 3 Bypass",
+      "value": 0
+    },
+    {
+      "index": 40,
+      "name": "Band 4 Bypass",
+      "value": 0
+    },
+    {
+      "index": 41,
+      "name": "Band 1 Mute",
+      "value": 0
+    },
+    {
+      "index": 42,
+      "name": "Band 2 Mute",
+      "value": 0
+    },
+    {
+      "index": 43,
+      "name": "Band 3 Mute",
+      "value": 0
+    },
+    {
+      "index": 44,
+      "name": "Band 4 Mute",
+      "value": 0
+    },
+    {
+      "index": 45,
+      "name": "Type",
+      "value": 0
+    },
+    {
+      "index": 46,
+      "name": "Number of Bands",
+      "value": 0
+    },
+    {
+      "index": 47,
+      "name": "Buffer Size",
+      "value": 0
+    },
+    {
+      "index": 48,
+      "name": "LMAX: Threshold",
+      "value": 0.5
+    },
+    {
+      "index": 49,
+      "name": "LMAX: Margin",
+      "value": 0.9800000190734863
+    },
+    {
+      "index": 50,
+      "name": "LMAX Ratio",
+      "value": 0
+    },
+    {
+      "index": 51,
+      "name": "LMAX: Attack",
+      "value": 0.75
+    },
+    {
+      "index": 52,
+      "name": "LMAX: Release",
+      "value": 1
+    },
+    {
+      "index": 53,
+      "name": "LMAX: Bypass",
+      "value": 0
+    },
+    {
+      "index": 54,
+      "name": "LMAX: Enable Histogram",
+      "value": 0
+    },
+    {
+      "index": 55,
+      "name": "LMAX: Enable Gain Reduction Meter",
+      "value": 0
+    },
+    {
+      "index": 56,
+      "name": "LMAX: Show Gain Reduction Meter Peak Hold",
+      "value": 0
+    },
+    {
+      "index": 57,
+      "name": "LMAX: Intersample Clip Detect",
+      "value": 0
+    },
+    {
+      "index": 58,
+      "name": "LMAX: Mode",
+      "value": 0.25
+    },
+    {
+      "index": 59,
+      "name": "LMAX: Gain Reduction Meter Peak Hold Time",
+      "value": 0
+    },
+    {
+      "index": 60,
+      "name": "Spectrum Show Peak Hold",
+      "value": 0
+    },
+    {
+      "index": 61,
+      "name": "Spectrum Flip Channel Phase",
+      "value": 0
+    },
+    {
+      "index": 62,
+      "name": "Spectrum Type",
+      "value": 0
+    },
+    {
+      "index": 63,
+      "name": "Window Size",
+      "value": 0
+    },
+    {
+      "index": 64,
+      "name": "Overlap",
+      "value": 0
+    },
+    {
+      "index": 65,
+      "name": "WindowType",
+      "value": 0
+    },
+    {
+      "index": 66,
+      "name": "Peak Hold Time",
+      "value": 0
+    },
+    {
+      "index": 67,
+      "name": "Spectrum Show Peak Hold",
+      "value": 0
+    },
+    {
+      "index": 68,
+      "name": "Spectrum Flip Channel Phase",
+      "value": 0
+    },
+    {
+      "index": 69,
+      "name": "Spectrum Type",
+      "value": 0
+    },
+    {
+      "index": 70,
+      "name": "Window Size",
+      "value": 0
+    },
+    {
+      "index": 71,
+      "name": "Overlap",
+      "value": 0
+    },
+    {
+      "index": 72,
+      "name": "WindowType",
+      "value": 0
+    },
+    {
+      "index": 73,
+      "name": "Peak Hold Time",
+      "value": 0
+    },
+    {
+      "index": 74,
+      "name": "Spectrum Show Peak Hold",
+      "value": 0
+    },
+    {
+      "index": 75,
+      "name": "Spectrum Flip Channel Phase",
+      "value": 0
+    },
+    {
+      "index": 76,
+      "name": "Spectrum Type",
+      "value": 0
+    },
+    {
+      "index": 77,
+      "name": "Window Size",
+      "value": 0
+    },
+    {
+      "index": 78,
+      "name": "Overlap",
+      "value": 0
+    },
+    {
+      "index": 79,
+      "name": "WindowType",
+      "value": 0
+    },
+    {
+      "index": 80,
+      "name": "Peak Hold Time",
+      "value": 0
+    },
+    {
+      "index": 81,
+      "name": "Spectrum Show Peak Hold",
+      "value": 0
+    },
+    {
+      "index": 82,
+      "name": "Spectrum Flip Channel Phase",
+      "value": 0
+    },
+    {
+      "index": 83,
+      "name": "Spectrum Type",
+      "value": 0
+    },
+    {
+      "index": 84,
+      "name": "Window Size",
+      "value": 0
+    },
+    {
+      "index": 85,
+      "name": "Overlap",
+      "value": 0
+    },
+    {
+      "index": 86,
+      "name": "WindowType",
+      "value": 0
+    },
+    {
+      "index": 87,
+      "name": "Peak Hold Time",
+      "value": 0
+    },
+    {
+      "index": 88,
+      "name": "Spectrum Show Peak Hold",
+      "value": 0
+    },
+    {
+      "index": 89,
+      "name": "Spectrum Flip Channel Phase",
+      "value": 0
+    },
+    {
+      "index": 90,
+      "name": "Spectrum Type",
+      "value": 0
+    },
+    {
+      "index": 91,
+      "name": "Window Size",
+      "value": 0
+    },
+    {
+      "index": 92,
+      "name": "Overlap",
+      "value": 0
+    },
+    {
+      "index": 93,
+      "name": "WindowType",
+      "value": 0
+    },
+    {
+      "index": 94,
+      "name": "Peak Hold Time",
+      "value": 0
+    },
+    {
+      "index": 95,
+      "name": "Level Meter Enable",
+      "value": 0
+    },
+    {
+      "index": 96,
+      "name": "Level Meter Show Peak Hold",
+      "value": 0
+    },
+    {
+      "index": 97,
+      "name": "Level Meter Detect Inter-Sample Peaks",
+      "value": 0
+    },
+    {
+      "index": 98,
+      "name": "Level Meter Type",
+      "value": 0
+    },
+    {
+      "index": 99,
+      "name": "Level Meter Scale Type",
+      "value": 0
+    },
+    {
+      "index": 100,
+      "name": "Level Meter K-System Scale Type",
+      "value": 0
+    },
+    {
+      "index": 101,
+      "name": "Level Meter Source",
+      "value": 0
+    },
+    {
+      "index": 102,
+      "name": "Level Meter RMS Time",
+      "value": 0
+    },
+    {
+      "index": 103,
+      "name": "Level Meter Peak Hold Time",
+      "value": 0
+    },
+    {
+      "index": 104,
+      "name": "Level Meter Readout Type",
+      "value": 0
+    }
+  ]
+}

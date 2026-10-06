@@ -1,0 +1,144 @@
+{
+  "goal": "C0021-class whispers match Bear bait active level (~within a few dB), breath ~7s on Bear bait not exaggerated",
+  "note": "No neural clean. proposed_v4_sparse = v4 compress + sparse normalize (spike tame + active-RMS lift to -25 + sample clip at -12 peak) when peak-RMS gap >= 18 dB.",
+  "target_dbfs": -12.0,
+  "max_boost_db": 8.0,
+  "sparse_max_boost_db": 16.0,
+  "clips": [
+    {
+      "label": "bear_bait_mixed",
+      "path": "\\\\nas_server\\Storage\\Dans Stuff\\WildTV\\Prairie Pursuit\\PP9001 Greg SpringBear\\Footage\\Grace bear hunt\\Day 2\\card 2\\Bear bait Camera Audio Extracted_2.wav",
+      "duration_s": 9.692375,
+      "input": {
+        "peak_dbfs": -7.812913701131732,
+        "active_rms_dbfs": -21.91232681274414,
+        "block_spread_p90_p10_db": 26.832300186157227,
+        "breath_7.0s": {
+          "peak_dbfs": -16.40267236229435,
+          "rms_dbfs": -36.255762533109475,
+          "active_rms_dbfs": -35.79943084716797
+        }
+      },
+      "current": {
+        "peak_dbfs": -12.000000253286988,
+        "active_rms_dbfs": -24.960832595825195,
+        "block_spread_p90_p10_db": 20.44219207763672,
+        "mix_measured_rms_dbfs": -24.960832595825195,
+        "breath_7.0s": {
+          "peak_dbfs": -20.111290783667425,
+          "rms_dbfs": -37.64353689250731,
+          "active_rms_dbfs": -36.99050521850586
+        },
+        "breath_peak_delta_db": -3.7086184213730746,
+        "mix_gain_db": 0.0,
+        "sparse": null
+      },
+      "proposed_v4": {
+        "peak_dbfs": -12.000000253286988,
+        "active_rms_dbfs": -24.960832595825195,
+        "block_spread_p90_p10_db": 20.44219207763672,
+        "mix_measured_rms_dbfs": -24.960832595825195,
+        "breath_7.0s": {
+          "peak_dbfs": -20.11129012817308,
+          "rms_dbfs": -37.64353689250731,
+          "active_rms_dbfs": -36.99050521850586
+        },
+        "breath_peak_delta_db": -3.7086177658787314,
+        "mix_gain_db": 0.0,
+        "sparse": null
+      },
+      "proposed_v4_sparse": {
+        "peak_dbfs": -12.000000253286988,
+        "active_rms_dbfs": -24.960832595825195,
+        "block_spread_p90_p10_db": 20.44219207763672,
+        "mix_measured_rms_dbfs": -24.960832595825195,
+        "breath_7.0s": {
+          "peak_dbfs": -20.111290783667425,
+          "rms_dbfs": -37.64353689250731,
+          "active_rms_dbfs": -36.99050521850586
+        },
+        "breath_peak_delta_db": -3.7086184213730746,
+        "mix_gain_db": 0.0,
+        "sparse": {
+          "sparse_normalize_applied": false,
+          "peak_rms_gap_db": 12.960832342538207
+        }
+      }
+    },
+    {
+      "label": "c0021_whisper",
+      "path": "\\\\nas_server\\Storage\\Dans Stuff\\WildTV\\Prairie Pursuit\\PP9001 Greg SpringBear\\Footage\\Grace bear hunt\\Day 1\\cam 2\\C0021 Audio Extracted_6.wav",
+      "duration_s": 32.39902083333333,
+      "input": {
+        "peak_dbfs": 4.120385153598826,
+        "active_rms_dbfs": -36.72468566894531,
+        "block_spread_p90_p10_db": 9.542423248291016,
+        "breath_7.0s": {
+          "peak_dbfs": -25.88030894039591,
+          "rms_dbfs": -41.481514737256695,
+          "active_rms_dbfs": -41.48151397705078
+        }
+      },
+      "current": {
+        "peak_dbfs": -12.000000253286988,
+        "active_rms_dbfs": -40.331729888916016,
+        "block_spread_p90_p10_db": 6.674411773681641,
+        "mix_measured_rms_dbfs": -40.331729888916016,
+        "breath_7.0s": {
+          "peak_dbfs": -24.280618687862212,
+          "rms_dbfs": -41.147574842354175,
+          "active_rms_dbfs": -41.14757537841797
+        },
+        "breath_peak_delta_db": 1.5996902525336978,
+        "mix_gain_db": 0.0,
+        "sparse": null
+      },
+      "proposed_v4": {
+        "peak_dbfs": -12.000000253286988,
+        "active_rms_dbfs": -40.331729888916016,
+        "block_spread_p90_p10_db": 6.674411773681641,
+        "mix_measured_rms_dbfs": -40.331729888916016,
+        "breath_7.0s": {
+          "peak_dbfs": -24.280618687862212,
+          "rms_dbfs": -41.147574842354175,
+          "active_rms_dbfs": -41.14757537841797
+        },
+        "breath_peak_delta_db": 1.5996902525336978,
+        "mix_gain_db": 0.0,
+        "sparse": null
+      },
+      "proposed_v4_sparse": {
+        "peak_dbfs": -12.000000253286988,
+        "active_rms_dbfs": -25.0784912109375,
+        "block_spread_p90_p10_db": 6.662466049194336,
+        "mix_measured_rms_dbfs": -25.0784912109375,
+        "breath_7.0s": {
+          "peak_dbfs": -12.000000253286988,
+          "rms_dbfs": -25.54003135859068,
+          "active_rms_dbfs": -25.54003143310547
+        },
+        "breath_peak_delta_db": 13.880308687108922,
+        "mix_gain_db": null,
+        "sparse": {
+          "sparse_normalize_applied": true,
+          "peak_rms_gap_db": 28.331729635629028,
+          "spike_tame_min_block_gain_db": -9.841036232062878,
+          "level_reference_active_rms_dbfs": -40.64323043823242,
+          "sparse_target_active_rms_dbfs": -25.0,
+          "sparse_gain_db": 15.643230438232422,
+          "output_peak_dbfs": -12.000000253286988,
+          "output_active_rms_dbfs": -25.0784912109375
+        }
+      }
+    }
+  ],
+  "inter_clip": {
+    "active_rms_gap_db_current": 15.37089729309082,
+    "active_rms_gap_db_proposed_v4": 15.37089729309082,
+    "active_rms_gap_db_proposed_v4_sparse": 0.11765861511230469
+  },
+  "acceptance_hints": {
+    "inter_clip_primary": "compare active_rms_gap_db_proposed_v4_sparse to current (~15 dB); target roughly <= 4 dB after listening",
+    "breath_7s_bear_bait": "breath_peak_delta_db on proposed_v4_sparse should stay near current (not positive boost > ~3 dB)"
+  }
+}

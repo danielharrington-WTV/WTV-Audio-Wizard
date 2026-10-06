@@ -1,0 +1,12 @@
+{
+  "first": {
+    "clips": 1,
+    "preset": "Broadcast",
+    "output_gain_db": -12
+  },
+  "second": {
+    "clips": 1,
+    "preset": "Broadcast",
+    "output_gain_db": -12
+  }
+}

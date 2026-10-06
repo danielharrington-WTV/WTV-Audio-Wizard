@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-10",
+  "version": "0.7.1 incremental development patch",
+  "approved_scope": "Review item 1: default Clean dialogue, Choose tracks alternative",
+  "javascript_tests": {
+    "passed": 106,
+    "failed": 0
+  },
+  "service_changes": false,
+  "native_premiere_acceptance": "pending",
+  "package_rebuilt": false,
+  "remaining_review_items": "Await individual user approval"
+}

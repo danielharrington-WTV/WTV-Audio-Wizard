@@ -1,0 +1,52 @@
+[
+  {
+    "label": "cold",
+    "wall_seconds": 17.988967499986757,
+    "stage_cache": {
+      "dialogue": false
+    },
+    "workers": {
+      "gap_urgenet": {
+        "worker_reused": false
+      }
+    },
+    "timings": {
+      "cleanup_seconds": 17.787319499999285,
+      "repair_seconds": 1.800013706088066e-06,
+      "mix_seconds": 0.009468199976254255,
+      "total_seconds": 17.836444600019604
+    }
+  },
+  {
+    "label": "warm-new-clip",
+    "wall_seconds": 5.003093199979048,
+    "stage_cache": {
+      "dialogue": false
+    },
+    "workers": {
+      "gap_urgenet": {
+        "worker_reused": true
+      }
+    },
+    "timings": {
+      "cleanup_seconds": 4.876349499973003,
+      "repair_seconds": 2.00001522898674e-06,
+      "mix_seconds": 0.007019299955572933,
+      "total_seconds": 4.9277610999997705
+    }
+  },
+  {
+    "label": "refinish",
+    "wall_seconds": 0.1430783000541851,
+    "stage_cache": {
+      "dialogue": true
+    },
+    "workers": {},
+    "timings": {
+      "cleanup_seconds": 0.03882139996858314,
+      "repair_seconds": 3.00002284348011e-07,
+      "mix_seconds": 0.0073794000199995935,
+      "total_seconds": 0.08351830003084615
+    }
+  }
+]

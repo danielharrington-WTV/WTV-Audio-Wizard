@@ -1,0 +1,33 @@
+{
+  "version": "0.7.1",
+  "date": "2026-09-10",
+  "feature": "Fix a pop: seeded, single-location plosive/pop attenuation (service/deplosive.py, plugin/deplosive.js)",
+  "python_tests": {
+    "passed": 84,
+    "failed_environment_only": 10,
+    "note": "Failures reproduce only under this session's substitute Python 3.10 environment (a borrowed env from a sibling project, not the product's real work/service-env). All are pre-existing and unrelated to this feature: service/stage_cache.py's digest_file() uses hashlib.file_digest(), added in Python 3.11, so every test that submits a /v1/jobs job fails with AttributeError under 3.10. Full-suite pass has not been re-confirmed against the real Python 3.12 work/service-env in this session."
+  },
+  "javascript_tests": {
+    "passed": 86
+  },
+  "real_audio_regression": "tests/test_deplosive.py's test_real_audio_three_measured_plosives_are_each_reduced_by_at_least_half re-validates the same function against the three real plosives measured during investigation (61-83% peak reduction, 68-82% RMS reduction each); skipped automatically if that external fixture is not present on the machine running tests.",
+  "bugs_found_and_fixed_before_native_confirmation": [
+    {
+      "bug": "plugin/local-api.js's endpoint allow-list regex did not include /v1/deplosive or the /v1/assets/{id}/download route added for this feature, so every click of Fix a pop failed immediately with 'Unexpected local service endpoint.' before reaching the service at all.",
+      "fix": "Added both routes to the allow-list regex.",
+      "regression_test": "tests/local-api.test.cjs: 'deplosive and asset-download routes are allowed (regression for \"Unexpected local service endpoint\")'"
+    },
+    {
+      "bug": "The attenuated clip's output WAV was written to fs.getTemporaryFolder(), imported, and placed on the timeline as that clip's live media reference -- then the entire temporary folder (including that same file) was deleted in run()'s finally block right after placement. The fix appeared to work (Premiere's cached/preview playback masked it) but the clip's actual backing file was gone. The fixed clip's new path was also never recorded on context.dialoguePaths, so a second Fix a pop on that same clip could not recognize it as a valid target.",
+      "fix": "Fixed clips now write to a persistent, user-chosen folder (asked once per clone via fs.getFolder(), reused for later fixes in the same session, matching per-clip.js/premiere.js's existing convention for every other stem output). Only the throwaway isolated-render export is deleted after upload. context.dialoguePaths is appended with the new path after each successful fix. Filenames use a random suffix, not just Date.now(), after a same-millisecond collision surfaced while testing this fix.",
+      "regression_tests": [
+        "tests/deplosive.test.cjs: 'regression: the fixed clip's output file is never deleted (it is the timeline clip's live media from here on)'",
+        "tests/deplosive.test.cjs: 'regression: the fixed clip is recognized as fixable again on a second run (context.dialoguePaths includes its new path)'"
+      ]
+    }
+  ],
+  "native_premiere_acceptance": "outstanding for Fix a pop specifically; user reported the endpoint-allowlist bug and the apparent-success/second-run bug from real usage before either fix above, and has not yet confirmed the corrected version",
+  "deferred": [
+    "fully automatic plosive detection (deliberately out of scope; see service/deplosive.py's module docstring -- simple energy-ratio detection could not reliably distinguish the real, human-flagged pop from ordinary loud speech in the validation file)"
+  ]
+}

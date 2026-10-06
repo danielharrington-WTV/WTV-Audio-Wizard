@@ -1,0 +1,55 @@
+{
+  "test": "real raw dialogue (gap_urgenet) and Bandit ambience/music HTTP pipeline, 44.1 kHz mono, one second",
+  "passed": true,
+  "result": {
+    "unit": "rms_dbfs",
+    "normalization": {
+      "dialogue": {
+        "measured": -59.57517623901367,
+        "gain_db": 18.0
+      },
+      "music": {
+        "measured": null,
+        "gain_db": 0.0
+      },
+      "effects": {
+        "measured": -35.037620544433594,
+        "gain_db": 5.037620544433594
+      }
+    },
+    "warnings": [],
+    "safety_gain_db": 0.0,
+    "peak_method": "4x oversampled peak, global attenuation to -1.2 dBFS; not a certified dBTP limiter",
+    "samples": 44100,
+    "sample_rate": 44100,
+    "channels": 1,
+    "enhancement": {
+      "model": "GAP-URGENet",
+      "samples": 48000,
+      "sample_rate": 48000,
+      "channels": 1,
+      "elapsed_seconds": 6.713372100028209,
+      "peak_allocated_mib": 4668.42041015625,
+      "peak_reserved_mib": 9900.0,
+      "input_source": "raw_audio"
+    },
+    "benchmark": {
+      "elapsed_seconds": 4.492935199989006,
+      "audio_seconds": 1.0,
+      "channels": 1,
+      "chunk_seconds": 8,
+      "hop_seconds": 1,
+      "peak_allocated_mib": 1022.4404296875,
+      "peak_reserved_mib": 1584.0,
+      "gpu": "NVIDIA GeForce RTX 5080",
+      "torch": "2.11.0+cu128",
+      "parameters": 37022688
+    },
+    "stems": [
+      "dialogue",
+      "music",
+      "effects",
+      "mix"
+    ]
+  }
+}

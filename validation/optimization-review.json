@@ -1,0 +1,30 @@
+{
+  "fixture": "deterministic synthetic 60s+137samples stereo 48kHz float32",
+  "music_levels": {
+    "current": {
+      "median_seconds": 0.02071409998461604,
+      "peak_traced_mib": 109.90048217773438
+    },
+    "bounded_128_frames": {
+      "median_seconds": 0.016126299975439906,
+      "peak_traced_mib": 4.714599609375
+    },
+    "bit_identical": true
+  },
+  "dialogue_only_mix": {
+    "current": {
+      "median_seconds": 0.28506850003032014,
+      "peak_traced_mib": 241.8509225845337
+    },
+    "skip_unused_duck_envelope": {
+      "median_seconds": 0.283415200014133,
+      "peak_traced_mib": 219.78502368927002
+    },
+    "wav_bytes_identical": true,
+    "decoded_samples_bit_identical": true,
+    "reports_identical": true,
+    "container_note": "Float WAV container metadata can differ; decoded audio compared separately."
+  },
+  "gap_checkpoint_bytes": 2344721317,
+  "limits": "Local CPU microbenchmarks only, three timed runs after warm-up; no end-to-end or GPU speedup claim. No production optimizations enabled."
+}

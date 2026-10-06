@@ -1,0 +1,45 @@
+{
+  "test": "real Bandit v2 HTTP pipeline, 44.1 kHz mono, one second",
+  "passed": true,
+  "result": {
+    "unit": "rms_dbfs",
+    "normalization": {
+      "dialogue": {
+        "measured": null,
+        "gain_db": 0.0
+      },
+      "music": {
+        "measured": null,
+        "gain_db": 0.0
+      },
+      "effects": {
+        "measured": -35.037620544433594,
+        "gain_db": 5.037620544433594
+      }
+    },
+    "warnings": [],
+    "safety_gain_db": 0.0,
+    "peak_method": "4x oversampled peak, global attenuation to -1.2 dBFS; not a certified dBTP limiter",
+    "samples": 44100,
+    "sample_rate": 44100,
+    "channels": 1,
+    "benchmark": {
+      "elapsed_seconds": 7.91606679999677,
+      "audio_seconds": 1.0,
+      "channels": 1,
+      "chunk_seconds": 8,
+      "hop_seconds": 1,
+      "peak_allocated_mib": 1022.4404296875,
+      "peak_reserved_mib": 1584.0,
+      "gpu": "NVIDIA GeForce RTX 5080",
+      "torch": "2.11.0+cu128",
+      "parameters": 37022688
+    },
+    "stems": [
+      "dialogue",
+      "music",
+      "effects",
+      "mix"
+    ]
+  }
+}

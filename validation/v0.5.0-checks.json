@@ -1,0 +1,10 @@
+{
+  "version": "0.5.0",
+  "python_tests": 30,
+  "javascript_tests": 39,
+  "panel_smoke": "passed; GAP default and unchecked optional stems",
+  "optional_stem_combinations": "all four tested for service, downloads and lane insertion",
+  "real_gpu": "GAP dialogue-only and GAP with Music-only passed at 44.1 kHz",
+  "native_music_pass": "researched and documented; not implemented",
+  "premiere_host_acceptance": "outstanding"
+}

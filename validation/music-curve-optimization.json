@@ -1,0 +1,23 @@
+{
+  "fixture": "synthetic; not Dan's project",
+  "duration_seconds": 1320,
+  "service_corners": 1707,
+  "channels": 2,
+  "results": [
+    {
+      "layout": "21 consecutive clips",
+      "legacy_native_keys": 69948,
+      "sparse_native_keys": 3494,
+      "reduction_percent": 95.00486075370274,
+      "max_curve_error_db": 2.9842794901924208e-12
+    },
+    {
+      "layout": "21 overlapping full-length clips",
+      "legacy_native_keys": 1467270,
+      "sparse_native_keys": 71694,
+      "reduction_percent": 95.11378273937312,
+      "max_curve_error_db": 5.6843418860808015e-12
+    }
+  ],
+  "native_premiere_timing": "not measured"
+}

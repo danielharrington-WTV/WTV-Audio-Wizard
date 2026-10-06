@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WTVAudioWizard — Project Planning</title>
+  <style>
+    :root {
+      --bg: #f4f5f7;
+      --surface: #ffffff;
+      --border: #dfe3e8;
+      --text: #1a1d21;
+      --muted: #5c6570;
+      --accent: #2563eb;
+      --task1: #7c3aed;
+      --task2: #0891b2;
+      --task3: #059669;
+      --task4: #d97706;
+      --task5: #dc2626;
+      --complete: #16a34a;
+      --pending: #ca8a04;
+      --radius: 10px;
+      --shadow: 0 1px 3px rgba(0,0,0,.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+    }
+    .page-header {
+      background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+      color: #fff;
+      padding: 2rem 1.5rem 1.5rem;
+    }
+    .page-header h1 { margin: 0 0 .35rem; font-size: 1.65rem; font-weight: 650; }
+    .page-header .meta { color: #cbd5e1; font-size: .92rem; }
+    .page-header .meta span + span::before { content: " · "; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 1.25rem 1.25rem 3rem; }
+    nav.task-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .5rem;
+      margin: -1.5rem 0 1.5rem;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: var(--bg);
+      padding: .75rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    nav.task-nav a {
+      text-decoration: none;
+      font-size: .82rem;
+      font-weight: 600;
+      padding: .45rem .75rem;
+      border-radius: 999px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      white-space: nowrap;
+    }
+    nav.task-nav a:hover { border-color: var(--accent); color: var(--accent); }
+    .task-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      margin-bottom: 1.75rem;
+      overflow: hidden;
+    }
+    .task-card header {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: .75rem;
+    }
+    .task-card header h2 {
+      margin: 0;
+      font-size: 1.15rem;
+      font-weight: 650;
+    }
+    .task-card .body { padding: 1.1rem 1.25rem 1.25rem; }
+    .badges { display: flex; flex-wrap: wrap; gap: .4rem; }
+    .badge {
+      font-size: .72rem;
+      font-weight: 650;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+      padding: .22rem .55rem;
+      border-radius: 4px;
+    }
+    .badge-due { background: #eef2ff; color: #4338ca; }
+    .badge-status { background: #dcfce7; color: #166534; }
+    .badge-assignee { background: #f1f5f9; color: #475569; }
+    .task-card[data-task="1"] header { border-left: 4px solid var(--task1); }
+    .task-card[data-task="2"] header { border-left: 4px solid var(--task2); }
+    .task-card[data-task="3"] header { border-left: 4px solid var(--task3); }
+    .task-card[data-task="4"] header { border-left: 4px solid var(--task4); }
+    .task-card[data-task="5"] header { border-left: 4px solid var(--task5); }
+    h3 { font-size: .98rem; margin: 1.35rem 0 .55rem; color: #334155; }
+    h3:first-child { margin-top: 0; }
+    p, ul, ol { margin: .55rem 0; }
+    ul, ol { padding-left: 1.25rem; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .88rem;
+      margin: .75rem 0;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: .5rem .65rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f8fafc; font-weight: 650; }
+    code, .mono {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: .84em;
+      background: #f1f5f9;
+      padding: .1rem .3rem;
+      border-radius: 3px;
+    }
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: .85rem 1rem;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: .78rem;
+      line-height: 1.45;
+    }
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: .35rem;
+      font-size: .88rem;
+      margin: .75rem 0;
+    }
+    .flow span {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      padding: .3rem .55rem;
+      border-radius: 5px;
+    }
+    .flow .arrow { background: none; border: none; color: var(--muted); padding: 0; }
+    .flow .optional { background: #fef3c7; border-color: #fcd34d; }
+    .callout {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: .75rem 1rem;
+      font-size: .9rem;
+      margin: .75rem 0;
+    }
+    .callout strong { display: block; margin-bottom: .25rem; }
+    .yes { color: #166534; font-weight: 600; }
+    .no { color: #991b1b; font-weight: 600; }
+    .partial { color: #92400e; font-weight: 600; }
+    .needs-id { font-weight: 700; color: var(--task3); white-space: nowrap; }
+    .want-id { font-weight: 700; color: var(--task4); white-space: nowrap; }
+    .section-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: .75rem;
+    }
+    .mini-card {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: .85rem 1rem;
+      background: #fafbfc;
+    }
+    .mini-card h4 { margin: 0 0 .4rem; font-size: .88rem; }
+    .checklist-table td:last-child { font-size: .85rem; color: var(--muted); }
+    .research-links {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: .5rem;
+      list-style: none;
+      padding: 0;
+      margin: .5rem 0 0;
+    }
+    .research-links a {
+      display: block;
+      padding: .55rem .75rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      text-decoration: none;
+      color: var(--accent);
+      font-size: .88rem;
+      font-weight: 500;
+    }
+    .research-links a:hover { background: #eff6ff; }
+    @media print {
+      nav.task-nav { position: static; }
+      .task-card { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+<header class="page-header">
+  <div class="wrap" style="padding-bottom:0">
+    <h1>WTVAudioWizard — Project Planning</h1>
+    <p class="meta">
+      <span>Author: Daniel H.</span>
+      <span>Updated: Sep 12, 2026</span>
+      <span>Build: v0.7.1</span>
+    </p>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <nav class="task-nav" aria-label="Planning tasks">
+    <a href="#task-1">1 · Workflow</a>
+    <a href="#task-2">2 · MVP</a>
+    <a href="#task-3">3 · NEEDS</a>
+    <a href="#task-4">4 · WANTS</a>
+    <a href="#task-5">5 · Plan</a>
+    <a href="#checklist">Checklist</a>
+    <a href="#research">Research</a>
+  </nav>
+
+  <!-- TASK 1 -->
+  <article class="task-card" id="task-1" data-task="1">
+    <header>
+      <div>
+        <h2>1. Current workflow assessment — Exploratory</h2>
+      </div>
+      <div class="badges">
+        <span class="badge badge-due">Due Sep 7</span>
+        <span class="badge badge-status">Complete</span>
+        <span class="badge badge-assignee">Christopher W. · Daniel H.</span>
+      </div>
+    </header>
+    <div class="body">
+      <h3>Current production workflow (WTV today)</h3>
+      <p>External mix via <strong>Polarity Audioworks</strong> on a ~22:30 episode. Times are editor-side unless noted.</p>
+      <table>
+        <thead><tr><th>#</th><th>Step</th><th>Est. time</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Nest any remixed music</td><td>&lt;5 min</td><td>Required to prevent an AAF export glitch</td></tr>
+          <tr><td>2</td><td>Export AAF</td><td>15–20 min</td><td>Handoff package for external post</td></tr>
+          <tr><td>3</td><td>Upload AAF to Dropbox</td><td>5–10 min</td><td></td></tr>
+          <tr><td>4</td><td>Email Polarity Audioworks with Dropbox link</td><td>—</td><td>Vendor turnaround not included below</td></tr>
+          <tr><td>5</td><td>Download / import new audio streams into Premiere; mute existing</td><td>5–10 min</td><td>Re-alignment against locked picture</td></tr>
+          <tr><td>6</td><td>QAQC</td><td>~30 min</td><td>Per 22:30 episode</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Revision loop (when QAQC fails)</h3>
+      <ol>
+        <li>Send back to Polarity with fix notes (vendor turnaround).</li>
+        <li>Re-import returned streams and QAQC again — <strong>15–20 min</strong> per revision cycle.</li>
+      </ol>
+
+      <div class="callout">
+        <strong>Editor-side time (happy path, excluding vendor)</strong>
+        ~60–75 min per episode before Polarity’s work. Each failed QAQC adds at least one more 15–20 min re-import/QAQC pass, plus another vendor round trip.
+      </div>
+
+      <h3>Pain points this flow creates</h3>
+      <ul>
+        <li><strong>Vendor dependency</strong> — every episode waits on Polarity + email/Dropbox handoff.</li>
+        <li><strong>AAF round-trip</strong> — export, upload, re-import; nesting workaround for music glitches.</li>
+        <li><strong>Revision cost</strong> — failed QAQC doubles down on import + 30 min review (or 15–20 min on revision pass).</li>
+        <li><strong>No in-timeline iteration</strong> — can’t audition a duck or dialogue fix without another full cycle.</li>
+      </ul>
+
+      <h3>Proposed in-panel workflow</h3>
+      <div class="flow">
+        <span>Connect</span><span class="arrow">→</span>
+        <span>Options</span><span class="arrow">→</span>
+        <span>1 Prepare</span><span class="arrow">→</span>
+        <span>2 Clean</span><span class="arrow">→</span>
+        <span>3 Add tracks</span><span class="arrow">→</span>
+        <span>4 Duck music</span>
+      </div>
+      <div class="flow">
+        <span class="optional">Fix a pop</span>
+        <span class="optional">Enhance low end</span>
+        <span class="arrow">(optional branches)</span>
+      </div>
+
+      <div class="section-grid">
+        <div class="mini-card">
+          <h4>Validated in real use (Sep 9–11)</h4>
+          <ul>
+            <li>Native music ducking</li>
+            <li>Per-clip Prepare → Clean → Add tracks</li>
+            <li>Dialogue dynamics + de-ess chain</li>
+            <li>Music pass (422 silent-music fix)</li>
+            <li>Partial dialogue selection</li>
+          </ul>
+        </div>
+        <div class="mini-card">
+          <h4>Still open</h4>
+          <ul>
+            <li>Fix a pop + Enhance low end native acceptance</li>
+            <li>Workflow review items 4–9</li>
+            <li>Mac service path (panel likely portable)</li>
+            <li>GPU per editor vs shared service economics</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="callout">
+        <strong>Conclusion</strong>
+        The Polarity AAF round-trip (~60–75 min editor time per episode, plus vendor latency and revision loops) is the main cost driver WTVAudioWizard targets. In-Premiere cleanup + ducking removes export/upload/email/re-import for those steps and keeps QAQC inside the same timeline.
+      </div>
+    </div>
+  </article>
+
+  <!-- TASK 2 -->
+  <article class="task-card" id="task-2" data-task="2">
+    <header>
+      <div>
+        <h2>2. Minimal viable product (MVP) definition</h2>
+      </div>
+      <div class="badges">
+        <span class="badge badge-due">Due Sep 8</span>
+        <span class="badge badge-status">Complete</span>
+      </div>
+    </header>
+    <div class="body">
+      <p><strong>Goal:</strong> Reduce post-audio labor cost while keeping editorial control inside Premiere.</p>
+      <p><strong>MVP = v0.7.1 core path</strong></p>
+
+      <table>
+        <thead><tr><th>Capability</th><th>MVP?</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>UXP panel in Premiere 25.6+</td><td class="yes">Yes</td><td>300×480 dock; token auth</td></tr>
+          <tr><td>Per-clip dialogue cleanup (GAP default)</td><td class="yes">Yes</td><td>Selected clips on dedicated tracks</td></tr>
+          <tr><td>Full-sequence mode</td><td class="yes">Yes</td><td>Secondary; dialogue-only input</td></tr>
+          <tr><td>Insert Clean dialogue on aligned tracks</td><td class="yes">Yes</td><td>Raw → Clean; lane mute rules apply</td></tr>
+          <tr><td>Optional Bandit stems</td><td class="yes">Yes</td><td>Ambience + Music; off by default</td></tr>
+          <tr><td>Native music conform + duck</td><td class="yes">Yes</td><td>Step 4; editable Amplify keyframes</td></tr>
+          <tr><td>Dialogue reference selector</td><td class="yes">Yes</td><td>Clean dialogue (default) or Choose tracks</td></tr>
+          <tr><td>Levels + peak protection</td><td class="yes">Yes</td><td>−12 / −28 / −30 dBFS defaults</td></tr>
+          <tr><td>Fix a pop</td><td class="partial">Yes*</td><td>Built; native re-confirmation pending</td></tr>
+          <tr><td>Enhance low end (whisper body)</td><td class="partial">Yes*</td><td>Built; listening acceptance pending</td></tr>
+          <tr><td>macOS compatibility</td><td class="partial">Need</td><td>Required (N13); not yet implemented</td></tr>
+          <tr><td>De-click · Experimental</td><td class="no">Opt-in only</td><td>Off by default</td></tr>
+          <tr><td>AV-CASS, cloud service, installer</td><td class="no">No</td><td>Deferred</td></tr>
+        </tbody>
+      </table>
+      <p><em>*Treat as MVP only after Dan's native acceptance pass.</em></p>
+
+      <h3>Success criteria</h3>
+      <ol>
+        <li>Editor completes steps 1–4 without leaving Premiere (except first output folder pick).</li>
+        <li>Clean dialogue audibly improved vs raw on WTV mic setups.</li>
+        <li>Music ducking follows dialogue; keyframes remain editable.</li>
+        <li>Original sequence unchanged; clone clearly named.</li>
+        <li>Failures produce Copy report diagnostics.</li>
+      </ol>
+    </div>
+  </article>
+
+  <!-- TASK 3 -->
+  <article class="task-card" id="task-3" data-task="3">
+    <header>
+      <div>
+        <h2>3. End goal, capabilities &amp; schema — NEEDS</h2>
+      </div>
+      <div class="badges">
+        <span class="badge badge-due">Due Sep 8</span>
+        <span class="badge badge-status">Complete</span>
+        <span class="badge badge-assignee">Christopher W. · Daniel H. · Shane A.</span>
+      </div>
+    </header>
+    <div class="body">
+      <h3>End goal</h3>
+      <p>One local AI-assisted audio post panel that:</p>
+      <ol>
+        <li>Cleans dialogue inside a Premiere clone.</li>
+        <li>Optionally extracts ambience/music stems without replacing timeline music.</li>
+        <li>Finishes existing music with baseline + dialogue-triggered ducking.</li>
+        <li>Offers pop fix and whisper body boost without full re-clean.</li>
+        <li>Preserves non-destructive editorial workflow.</li>
+        <li><strong>Runs on macOS</strong> as well as Windows (Premiere panel + local GPU service).</li>
+      </ol>
+
+      <h3>Required capabilities</h3>
+      <table>
+        <thead><tr><th>ID</th><th>Need</th><th>Implementation</th></tr></thead>
+        <tbody>
+          <tr><td class="needs-id">N1</td><td>Authenticated local HTTP API</td><td><code>service/app.py</code> · loopback :8756 · bearer token</td></tr>
+          <tr><td class="needs-id">N2</td><td>Upload/export WAV by asset ID</td><td><code>POST /v1/assets</code>, <code>GET …/download</code></td></tr>
+          <tr><td class="needs-id">N3</td><td>Async cleanup job + cancel</td><td><code>POST /v1/jobs</code>, poll, <code>DELETE</code></td></tr>
+          <tr><td class="needs-id">N4</td><td>Dialogue enhancement</td><td>GAP-URGENet (default) or MossFormer2</td></tr>
+          <tr><td class="needs-id">N5</td><td>Optional stem separation</td><td>Bandit v2 when Ambience/Music checked</td></tr>
+          <tr><td class="needs-id">N6</td><td>Finishing: level, duck, peak safety</td><td>RMS/LUFS · threshold duck · 4× OS peak cap</td></tr>
+          <tr><td class="needs-id">N7</td><td>Premiere clone / export / import</td><td><code>plugin/premiere.js</code></td></tr>
+          <tr><td class="needs-id">N8</td><td>Native music analysis + keyframes</td><td><code>POST /v1/music-analysis</code> · Amplify</td></tr>
+          <tr><td class="needs-id">N9</td><td>Strict request validation</td><td>Pydantic <code>Strict</code>; extra fields forbidden</td></tr>
+          <tr><td class="needs-id">N10</td><td>Diagnostics</td><td>Copy report · timings · cache flags</td></tr>
+          <tr><td class="needs-id">N11</td><td>Seeded pop attenuation</td><td><code>POST /v1/deplosive</code></td></tr>
+          <tr><td class="needs-id">N12</td><td>Whole-clip low-end body boost</td><td><code>POST /v1/lowend</code></td></tr>
+          <tr><td class="needs-id">N13</td><td><strong>macOS compatibility</strong></td><td>Premiere UXP panel on macOS; local GPU service with validated CUDA/MPS path, macOS install/start script, and native acceptance on Apple Silicon — <em>required, pending implementation</em></td></tr>
+        </tbody>
+      </table>
+
+      <h3>Service schema (canonical)</h3>
+      <p>Defined in <code>../service/schema.py</code> · version <strong>1</strong></p>
+
+      <div class="section-grid">
+        <div class="mini-card">
+          <h4>Settings (highlights)</h4>
+          <ul>
+            <li><code>enhancer</code>: gap_urgenet · mossformer2</li>
+            <li><code>separator</code>: bandit_v2 · av_cass · provided_stems</li>
+            <li><code>stems[]</code>: dialogue −12, music −28 duck, effects −30</li>
+            <li><code>duck_db</code> 0–30 · <code>threshold_dbfs</code> −40 default</li>
+            <li><code>output_rate</code>: 44100 · 48000 · 96000</li>
+          </ul>
+        </div>
+        <div class="mini-card">
+          <h4>Standalone endpoints</h4>
+          <ul>
+            <li><code>DeplosiveRequest</code> → seed 0–600 s</li>
+            <li><code>LowEndRequest</code> → intensity 0.2–3.0</li>
+          </ul>
+          <h4>Client-only (not in schema)</h4>
+          <ul>
+            <li>Duck against: clean · tracks</li>
+            <li>Panel prefs · output folder paths</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </article>
+
+  <!-- TASK 4 -->
+  <article class="task-card" id="task-4" data-task="4">
+    <header>
+      <div>
+        <h2>4. Enhancements — WANTS</h2>
+      </div>
+      <div class="badges">
+        <span class="badge badge-due">Due Sep 9</span>
+        <span class="badge badge-status">Complete</span>
+        <span class="badge badge-assignee">Dan R. · Daniel H.</span>
+      </div>
+    </header>
+    <div class="body">
+      <p>Prioritized backlog. <strong>None approved</strong> unless Dan explicitly approves (one fix at a time).</p>
+
+      <h3>P1 — Correctness (workflow review)</h3>
+      <table>
+        <thead><tr><th>ID</th><th>Want</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td class="want-id">W1</td><td>Music effect ownership survives reorder</td><td>Review item 4</td></tr>
+          <tr><td class="want-id">W2</td><td>Reused empty track unmuted after insert</td><td>Review item 5</td></tr>
+          <tr><td class="want-id">W3</td><td>Fix a pop detects slip/speed/effect edits</td><td>Review item 6</td></tr>
+          <tr><td class="want-id">W4</td><td>Pop rollback restores full clip state</td><td>Review item 7</td></tr>
+          <tr><td class="want-id">W5</td><td>Pop cancel during upload/DSP/download</td><td>Review item 8</td></tr>
+          <tr><td class="want-id">W6</td><td>Music Undo models split transactions</td><td>Review item 9</td></tr>
+        </tbody>
+      </table>
+
+      <h3>P2 — Workflow &amp; quality</h3>
+      <table>
+        <thead><tr><th>ID</th><th>Want</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td class="want-id">W7</td><td>Session recovery after panel reload</td><td>Persist clone ↔ paths ↔ manifest</td></tr>
+          <tr><td class="want-id">W8</td><td>Improved de-click detection</td><td>Report-first; see DECLICK-RESEARCH.md</td></tr>
+          <tr><td class="want-id">W9</td><td>Native gain automation for pop repair</td><td>Avoid full clip replace</td></tr>
+          <tr><td class="want-id">W10</td><td>Sparse music keyframes</td><td>Reduce 0.25 dB subdivision</td></tr>
+          <tr><td class="want-id">W11</td><td>Stage-grouped batches</td><td>Fewer model reloads</td></tr>
+          <tr><td class="want-id">W12</td><td>Cache/storage eviction</td><td>stage-cache grows unbounded</td></tr>
+          <tr><td class="want-id">W13</td><td>Voice polish chain</td><td>Scrapped; see VOICE-POLISH-PLAN.md</td></tr>
+          <tr><td class="want-id">W14</td><td>Premiere markers for click/pop report</td><td>Text report only today</td></tr>
+          <tr><td class="want-id">W15</td><td>Auto-detect output folder</td><td>From project location</td></tr>
+        </tbody>
+      </table>
+
+      <h3>P3 — Platform &amp; distribution</h3>
+      <table>
+        <thead><tr><th>ID</th><th>Want</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td class="want-id">W17</td><td>AV-CASS integration</td><td>Linux/WSL worker</td></tr>
+          <tr><td class="want-id">W18</td><td>Installer + model distribution</td><td>Checkpoint licensing</td></tr>
+          <tr><td class="want-id">W19</td><td>Remote hosted service</td><td>TLS · auth · queue</td></tr>
+          <tr><td class="want-id">W20</td><td>Essential Sound / clip tagging</td><td>Not exposed in UXP</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <!-- TASK 5 -->
+  <article class="task-card" id="task-5" data-task="5">
+    <header>
+      <div>
+        <h2>5. Plan before any code is written</h2>
+      </div>
+      <div class="badges">
+        <span class="badge badge-due">Due Sep 10</span>
+        <span class="badge badge-status">Complete</span>
+        <span class="badge badge-assignee">Daniel H.</span>
+      </div>
+    </header>
+    <div class="body">
+      <p>Retrospective plan record. Code exists at v0.7.1 and aligns with this architecture.</p>
+
+      <h3>Architecture</h3>
+      <pre>┌─────────────────────┐         token/HTTP          ┌──────────────────────┐
+│  Premiere UXP panel │ ◄──────────────────────────► │  Local Python service │
+│  plugin/*.js        │    assets · jobs · analysis  │  service/*.py · GPU   │
+└─────────┬───────────┘                              └──────────┬───────────┘
+          │ clone / export / import                               │ one GPU job
+          ▼                                                       ▼
+   Premiere Project                                     work/wtv-data · stage-cache</pre>
+
+      <h3>Design principles</h3>
+      <ol>
+        <li>Never replace raw clips — add aligned stems in a clone.</li>
+        <li>Bandit speech never feeds dialogue cleanup.</li>
+        <li>Timeline music finished with native effects, not extracted stems.</li>
+        <li>Upload once; refer by <code>asset_id</code>.</li>
+        <li>One GPU model resident; idle unload.</li>
+        <li>Immutable stage cache keyed by audio + checkpoint identity.</li>
+        <li>Verify timeline before/after; Copy report on failure.</li>
+      </ol>
+
+      <h3>Phases executed</h3>
+      <table>
+        <thead><tr><th>Phase</th><th>Target</th><th>Delivered</th></tr></thead>
+        <tbody>
+          <tr><td>0</td><td>Adobe API + GPU smoke</td><td>ARCHITECTURE-VALIDATION.md</td></tr>
+          <tr><td>1</td><td>Core pipeline</td><td>v0.4–0.5</td></tr>
+          <tr><td>2</td><td>Per-clip + stems</td><td>v0.6–0.7.0</td></tr>
+          <tr><td>3</td><td>Native music pass</td><td>v0.7.0 · confirmed Sep 9</td></tr>
+          <tr><td>4</td><td>Repair utilities</td><td>v0.7.1</td></tr>
+          <tr><td>5</td><td>Workflow hardening</td><td>Review 1–3 · dynamics · UI</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Phase 6 — Next (Sep 14+)</h3>
+      <ol>
+        <li>Native acceptance: Fix a pop + Enhance low end.</li>
+        <li>Dan approves review items 4–9 individually.</li>
+        <li>macOS service path (N13).</li>
+        <li>De-click: detection before default-on repair.</li>
+        <li>Packaging decision after MVP sign-off.</li>
+      </ol>
+    </div>
+  </article>
+
+  <!-- CHECKLIST -->
+  <article class="task-card" id="checklist" data-task="0">
+    <header>
+      <div><h2>Task checklist — Daniel H (Sep 12 and earlier)</h2></div>
+    </header>
+    <div class="body">
+      <table class="checklist-table">
+        <thead><tr><th>Subtask</th><th>Due</th><th>Status</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Current workflow assessment — Exploratory</td><td>Sep 7</td><td class="yes">Complete</td><td>Christopher W. to confirm post quoting</td></tr>
+          <tr><td>Minimal viable product definition</td><td>Sep 8</td><td class="yes">Complete</td><td>§2 above</td></tr>
+          <tr><td>End goal + schema (NEEDS)</td><td>Sep 8</td><td class="yes">Complete</td><td>Shane A. to confirm schema</td></tr>
+          <tr><td>Enhancements (WANTS)</td><td>Sep 9</td><td class="yes">Complete</td><td>Dan R. to prioritize</td></tr>
+          <tr><td>Plan before any code is written</td><td>Sep 10</td><td class="yes">Complete</td><td>Retrospective; code aligned</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Open questions for reviewers</h3>
+      <ul>
+        <li><strong>Christopher W.:</strong> Does §1 match how post quotes time/cost?</li>
+        <li><strong>Shane A.:</strong> Does the schema cover integration/reporting needs?</li>
+        <li><strong>Dan R.:</strong> Which WANTS rank highest for cost savings?</li>
+        <li><strong>Dan (product):</strong> Fix a pop + Enhance low end — MVP or WANTS until native pass?</li>
+      </ul>
+    </div>
+  </article>
+
+  <!-- RESEARCH -->
+  <article class="task-card" id="research" data-task="0">
+    <header>
+      <div><h2>Related research documents</h2></div>
+    </header>
+    <div class="body">
+      <ul class="research-links">
+        <li><a href="PROJECT-PLANNING.md">PROJECT-PLANNING.md</a></li>
+        <li><a href="ARCHITECTURE-VALIDATION.md">ARCHITECTURE-VALIDATION.md</a></li>
+        <li><a href="WORKFLOW-REVIEW-2026-09-10.md">WORKFLOW-REVIEW-2026-09-10.md</a></li>
+        <li><a href="DECLICK-RESEARCH.md">DECLICK-RESEARCH.md</a></li>
+        <li><a href="OPTIMIZATION-REVIEW.md">OPTIMIZATION-REVIEW.md</a></li>
+        <li><a href="AV-CASS-INTEGRATION.md">AV-CASS-INTEGRATION.md</a></li>
+        <li><a href="LOW-END-EVALUATION-2026-09-11.md">LOW-END-EVALUATION-2026-09-11.md</a></li>
+        <li><a href="VOICE-POLISH-PLAN.md">VOICE-POLISH-PLAN.md</a></li>
+        <li><a href="DIALOGUE-RICHNESS-PROPOSAL.md">DIALOGUE-RICHNESS-PROPOSAL.md</a></li>
+        <li><a href="../HANDOFF.md">HANDOFF.md (implementation)</a></li>
+      </ul>
+    </div>
+  </article>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,5 @@
+{
+  "passed": true,
+  "test": "Uvicorn loopback HTTP startup and authenticated health",
+  "service_stopped_after_test": true
+}

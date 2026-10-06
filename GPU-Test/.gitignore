@@ -1,0 +1,13 @@
+# Model weights (~2.34 GB) are fetched by fetch_checkpoints.py - never commit them.
+checkpoints/*
+!checkpoints/manifest.json
+!checkpoints/config.json
+
+# Local Python environment created by gpu_test.py
+.venv/
+__pycache__/
+*.pyc
+
+# Per-machine benchmark output
+results/*
+!results/.gitkeep

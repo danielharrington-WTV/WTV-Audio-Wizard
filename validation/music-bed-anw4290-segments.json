@@ -1,0 +1,293 @@
+{
+  "file": "h:\\Dans Stuff\\WildTV\\Prairie Pursuit\\PP9001 Greg SpringBear\\Music\\ANW2865_038_Back-From-The-Dead-3.wav",
+  "segment_count": 10,
+  "settings": {
+    "target_dbfs": -20,
+    "target_mode": "peak",
+    "duck_db": 10,
+    "bed_compression_default": true
+  },
+  "dialogue_simulation": "35–65% of each segment at −20 dBFS block level",
+  "consistency": {
+    "baseline_gain_db": {
+      "mean": -9.88,
+      "stdev": 0.31
+    },
+    "between_lines_active_rms_dbfs": {
+      "mean": -35.21,
+      "stdev": 1.82
+    }
+  },
+  "segments": [
+    {
+      "index": 1,
+      "time_range_s": [
+        0,
+        12.52
+      ],
+      "duration_s": 12.52,
+      "measured_peak_dbfs": 1.95,
+      "with_bed": {
+        "baseline_gain_db": -9.95,
+        "predicted_peak_dbfs": -20,
+        "bed_report": {
+          "crest_db_before": 16.88802388987161,
+          "crest_db_after": 16.801015268721365,
+          "blocks_compressed": 623,
+          "mean_compression_db": -11.642290190826138
+        },
+        "between_lines_active_rms_dbfs": -37.49370100250416
+      },
+      "without_bed": {
+        "baseline_gain_db": -21.95,
+        "predicted_peak_dbfs": -20,
+        "between_lines_active_rms_dbfs": -37.61399837830528
+      },
+      "delta_baseline_db": 12,
+      "delta_between_lines_rms_db": 0.12
+    },
+    {
+      "index": 2,
+      "time_range_s": [
+        12.52,
+        25.04
+      ],
+      "duration_s": 12.52,
+      "measured_peak_dbfs": 2.28,
+      "with_bed": {
+        "baseline_gain_db": -10.28,
+        "predicted_peak_dbfs": -20,
+        "bed_report": {
+          "crest_db_before": 16.90665873271734,
+          "crest_db_after": 16.85765620110623,
+          "blocks_compressed": 626,
+          "mean_compression_db": -11.837019600682696
+        },
+        "between_lines_active_rms_dbfs": -37.94026101542495
+      },
+      "without_bed": {
+        "baseline_gain_db": -22.28,
+        "predicted_peak_dbfs": -20,
+        "between_lines_active_rms_dbfs": -38.0236014622396
+      },
+      "delta_baseline_db": 12,
+      "delta_between_lines_rms_db": 0.08
+    },
+    {
+      "index": 3,
+      "time_range_s": [
+        25.04,
+        37.56
+      ],
+      "duration_s": 12.52,
+      "measured_peak_dbfs": 2.34,
+      "with_bed": {
+        "baseline_gain_db": -10.34,
+        "predicted_peak_dbfs": -20.44,
+        "bed_report": {
+          "crest_db_before": 16.196826641178657,
+          "crest_db_after": 16.189020567681006,
+          "blocks_compressed": 626,
+          "mean_compression_db": -11.991587092550283
+        },
+        "between_lines_active_rms_dbfs": -36.694234978380564
+      },
+      "without_bed": {
+        "baseline_gain_db": -22.34,
+        "predicted_peak_dbfs": -20.44,
+        "between_lines_active_rms_dbfs": -36.70344704317794
+      },
+      "delta_baseline_db": 12,
+      "delta_between_lines_rms_db": 0.01
+    },
+    {
+      "index": 4,
+      "time_range_s": [
+        37.56,
+        50.08
+      ],
+      "duration_s": 12.52,
+      "measured_peak_dbfs": 1.59,
+      "with_bed": {
+        "baseline_gain_db": -9.59,
+        "predicted_peak_dbfs": -20,
+        "bed_report": {
+          "crest_db_before": 12.920872477408365,
+          "crest_db_after": 12.920417953401593,
+          "blocks_compressed": 626,
+          "mean_compression_db": -11.998573696054981
+        },
+        "between_lines_active_rms_dbfs": -33.61546665554064
+      },
+      "without_bed": {
+        "baseline_gain_db": -21.59,
+        "predicted_peak_dbfs": -20,
+        "between_lines_active_rms_dbfs": -33.616197838620955
+      },
+      "delta_baseline_db": 12,
+      "delta_between_lines_rms_db": 0
+    },
+    {
+      "index": 5,
+      "time_range_s": [
+        50.08,
+        62.6
+      ],
+      "duration_s": 12.52,
+      "measured_peak_dbfs": 1.73,
+      "with_bed": {
+        "baseline_gain_db": -9.73,
+        "predicted_peak_dbfs": -20.14,
+        "bed_report": {
+          "crest_db_before": 12.863564519643274,
+          "crest_db_after": 12.861983268507585,
+          "blocks_compressed": 626,
+          "mean_compression_db": -11.988061937358097
+        },
+        "between_lines_active_rms_dbfs": -33.63766246705648
+      },
+      "without_bed": {
+        "baseline_gain_db": -21.73,
+        "predicted_peak_dbfs": -20.14,
+        "between_lines_active_rms_dbfs": -33.64010084527846
+      },
+      "delta_baseline_db": 12,
+      "delta_between_lines_rms_db": 0
+    },
+    {
+      "index": 6,
+      "time_range_s": [
+        62.6,
+        75.12
+      ],
+      "duration_s": 12.52,
+      "measured_peak_dbfs": 1.35,
+      "with_bed": {
+        "baseline_gain_db": -9.35,
+        "predicted_peak_dbfs": -20,
+        "bed_report": {
+          "crest_db_before": 13.431885156100076,
+          "crest_db_after": 13.4120173260919,
+          "blocks_compressed": 626,
+          "mean_compression_db": -11.871319251184318
+        },
+        "between_lines_active_rms_dbfs": -32.719077653803446
+      },
+      "without_bed": {
+        "baseline_gain_db": -21.35,
+        "predicted_peak_dbfs": -20,
+        "between_lines_active_rms_dbfs": -32.722896499346504
+      },
+      "delta_baseline_db": 12,
+      "delta_between_lines_rms_db": 0
+    },
+    {
+      "index": 7,
+      "time_range_s": [
+        75.12,
+        87.64
+      ],
+      "duration_s": 12.52,
+      "measured_peak_dbfs": 2.17,
+      "with_bed": {
+        "baseline_gain_db": -10.17,
+        "predicted_peak_dbfs": -20,
+        "bed_report": {
+          "crest_db_before": 16.14543677877907,
+          "crest_db_after": 16.138478390623025,
+          "blocks_compressed": 626,
+          "mean_compression_db": -11.988971537035807
+        },
+        "between_lines_active_rms_dbfs": -36.86411168995827
+      },
+      "without_bed": {
+        "baseline_gain_db": -22.17,
+        "predicted_peak_dbfs": -20,
+        "between_lines_active_rms_dbfs": -36.8733503400434
+      },
+      "delta_baseline_db": 12,
+      "delta_between_lines_rms_db": 0.01
+    },
+    {
+      "index": 8,
+      "time_range_s": [
+        87.64,
+        100.16
+      ],
+      "duration_s": 12.52,
+      "measured_peak_dbfs": 2.02,
+      "with_bed": {
+        "baseline_gain_db": -10.02,
+        "predicted_peak_dbfs": -20,
+        "bed_report": {
+          "crest_db_before": 15.062069591896647,
+          "crest_db_after": 15.059379065600082,
+          "blocks_compressed": 626,
+          "mean_compression_db": -11.994427558150207
+        },
+        "between_lines_active_rms_dbfs": -35.409636438896285
+      },
+      "without_bed": {
+        "baseline_gain_db": -22.02,
+        "predicted_peak_dbfs": -20,
+        "between_lines_active_rms_dbfs": -35.41157970593579
+      },
+      "delta_baseline_db": 12,
+      "delta_between_lines_rms_db": 0
+    },
+    {
+      "index": 9,
+      "time_range_s": [
+        100.16,
+        112.68
+      ],
+      "duration_s": 12.52,
+      "measured_peak_dbfs": 1.83,
+      "with_bed": {
+        "baseline_gain_db": -9.83,
+        "predicted_peak_dbfs": -20.25,
+        "bed_report": {
+          "crest_db_before": 13.12152577935963,
+          "crest_db_after": 13.119112752277509,
+          "blocks_compressed": 626,
+          "mean_compression_db": -11.986065747666787
+        },
+        "between_lines_active_rms_dbfs": -33.33087586187402
+      },
+      "without_bed": {
+        "baseline_gain_db": -21.83,
+        "predicted_peak_dbfs": -20.25,
+        "between_lines_active_rms_dbfs": -33.33087586187402
+      },
+      "delta_baseline_db": 12,
+      "delta_between_lines_rms_db": 0
+    },
+    {
+      "index": 10,
+      "time_range_s": [
+        112.68,
+        125.3
+      ],
+      "duration_s": 12.62,
+      "measured_peak_dbfs": 1.59,
+      "with_bed": {
+        "baseline_gain_db": -9.59,
+        "predicted_peak_dbfs": -20,
+        "bed_report": {
+          "crest_db_before": 13.000860885025489,
+          "crest_db_after": 12.980759703538263,
+          "blocks_compressed": 536,
+          "mean_compression_db": -11.557945949936354
+        },
+        "between_lines_active_rms_dbfs": -34.403472262581374
+      },
+      "without_bed": {
+        "baseline_gain_db": -21.59,
+        "predicted_peak_dbfs": -20,
+        "between_lines_active_rms_dbfs": -34.44798922690609
+      },
+      "delta_baseline_db": 12,
+      "delta_between_lines_rms_db": 0.04
+    }
+  ]
+}

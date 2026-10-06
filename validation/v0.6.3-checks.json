@@ -1,0 +1,10 @@
+{
+  "version": "0.6.3",
+  "python_tests": 63,
+  "javascript_tests": 58,
+  "panel_smoke": "passed: legacy saved repair ignored, explicit off/on submitted, prerequisites and music action",
+  "layout": "browser approximation passed at 300x480 and 280x280; screenshots retained",
+  "premiere_host_acceptance": "outstanding",
+  "declick": "UI restored off by default; DSP unchanged; comparison and recommendations in DECLICK-RESEARCH.md",
+  "research": "local click-only WTV vs FFmpeg overlap-save thresholds 2 and 6; one fixture, not a perceptual benchmark"
+}

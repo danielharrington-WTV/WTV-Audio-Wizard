@@ -1,0 +1,12 @@
+{
+  "elapsed_seconds": 26.706748399999924,
+  "audio_seconds": 10.0,
+  "channels": 2,
+  "chunk_seconds": 8,
+  "hop_seconds": 1,
+  "peak_allocated_mib": 1022.4404296875,
+  "peak_reserved_mib": 1584.0,
+  "gpu": "NVIDIA GeForce RTX 5080",
+  "torch": "2.11.0+cu128",
+  "parameters": 37022688
+}
