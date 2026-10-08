@@ -46,6 +46,7 @@ const extractAmbience = require('./extract-ambience.js');
 const restoreSpeech = require('./restore-speech.js');
 const perClip = require('./per-clip.js');
 const {processBatch, saveManifest, validateOutputs} = require('./clip-batch.js');
+const {createPrefetch} = require('./prefetch.js');
 const {waitForStableWav, waitForStableWavFile} = require('./wav.js');
 const {computeButtonState, isResumableBatchContext} = require('./button-state.js');
 const $ = id => document.getElementById(id);
@@ -1001,8 +1002,17 @@ function formatTimelinePosition(seconds) {
 function clipLocation(clip) {
   return `A${clip.trackIndex + 1} @ ${formatTimelinePosition(clip.start.seconds)}`;
 }
+// Interleaved batch (2026-10-07): set by Batch Process Dialogue for the length
+// of one run. Each finished export is handed to it so the service starts on
+// that clip while Premiere exports the next (see prefetch.js).
+let batchPrefetch = null, batchPrefetchWanted = false;
 async function exportPerClipBatch(context, preset) {
+  // Created here, not earlier: the job settings include the sequence's sample
+  // rate, which is only known once this run's context exists.
+  if (batchPrefetchWanted && !batchPrefetch) batchPrefetch = newBatchPrefetch();
   const pending = context.clips.filter(c => !c.exportVerified);
+  // A resumed batch: clips exported before the interruption can start now.
+  for (const clip of context.clips) if (clip.exportVerified) batchPrefetch?.exported(context, clip);
   // Batch-wide efficiency (see per-clip.js exportClip): fingerprint the full
   // sequence at most every 15 s, fingerprint the render once at the end.
   context.lastAssertMs = 0;
@@ -1024,6 +1034,7 @@ async function exportPerClipBatch(context, preset) {
       {rate: context.rate, channels: context.channels, duration: clip.exportDuration ?? clip.duration});
     if (existing) {
       clip.inputFile = existing; clip.exportVerified = true; reusedExports++;
+      batchPrefetch?.exported(context, clip);
       progress.event({clipIndex:index,done:true,reused:true});
       say(`Export ${index + 1}/${context.clips.length} \u00b7 ${clip.name} \u00b7 reused existing file`);
       continue;
@@ -1048,6 +1059,7 @@ async function exportPerClipBatch(context, preset) {
       throw err;
     }
     clip.exportVerified = true;
+    batchPrefetch?.exported(context, clip);
     progress.event({clipIndex:index,done:true});
   }
   } finally {
@@ -1166,9 +1178,22 @@ async function doProcess() {
     localStorage.setItem('wtv-settings-v1', JSON.stringify(chosen));
     let progress = beginBatchProgress('Cleaning', context.clips);
     let processingPhase = null;
+    // Stop starting jobs early; from here processBatch collects them. If the
+    // settings somehow differ from the ones the early jobs used, drop them.
+    let prefetch = null;
+    if (batchPrefetch) {
+      if (batchPrefetch.matches(chosen)) {
+        const early = await batchPrefetch.stop();
+        prefetch = batchPrefetch;
+        context.earlyStarted = early.started;
+        if (early.started) say(`${early.started} of ${context.clips.length} clips were sent for processing during export.`);
+        // Not an error: the batch continues the old way. Kept for Copy report.
+        if (early.disabled) { recentStatus.push(`${new Date().toISOString()} Early processing stopped: ${early.disabled}`); if (recentStatus.length > 20) recentStatus.shift(); }
+      } else { await batchPrefetch.abort(); batchPrefetch = null; }
+    }
     try {
       setCleanProgress(true, 0);
-      await processBatch(context, chosen, {request, binary: uxp.storage.formats.binary, check: checkCancelled, onJob: value => { jobId = value; },
+      await processBatch(context, chosen, {prefetch, request, binary: uxp.storage.formats.binary, check: checkCancelled, onJob: value => { jobId = value; },
         onProgress: e => {
           if(e.phase && e.phase!==processingPhase){progress.stop();processingPhase=e.phase;progress=beginBatchProgress(e.phase==='dialogue'?'1/2 Dialogue cleanup':'2/2 Stems and finishing',context.clips);}
           progress.event(e);
@@ -1246,10 +1271,21 @@ async function doApply() {
 function workflowButtonState() {
   return computeButtonState({context, busy: false, factory, jobResult, mode: $('mode').value});
 }
+// The early-start helper for one per-clip run, or null when it cannot apply
+// (full sequence mode, not connected, or settings that doProcess would refuse).
+function newBatchPrefetch() {
+  if ($('mode').value !== 'per_clip' || !factory || !context) return null;
+  for (const name of ['dialogue', 'music', 'effects', 'duck', 'attack', 'release']) if ($(name).value.trim() === '') return null;
+  try {
+    return createPrefetch({settings: settings(), request, binary: uxp.storage.formats.binary, sleep, isCancelled: () => cancelled});
+  } catch (_) { return null; }
+}
 action('runCleanDialogue', async () => {
   const wallStart = performance.now();
   const phases = {};
   let stepState = workflowButtonState();
+  batchPrefetch = null; batchPrefetchWanted = true;
+  try {
   if (!stepState.prepare) {
     const t0 = performance.now();
     await doPrepare();
@@ -1263,6 +1299,12 @@ action('runCleanDialogue', async () => {
     await doProcess();
     if (!jobResult) return;
     phases.process = (performance.now() - t0) / 1000;
+  }
+  } finally {
+    batchPrefetchWanted = false;
+    // Anything started early and not collected (stopped, failed or cancelled
+    // run) is cancelled on the service. After a completed run this is a no-op.
+    if (batchPrefetch) { const pending = batchPrefetch; batchPrefetch = null; try { await pending.abort(); } catch (_) {} }
   }
   stepState = workflowButtonState();
   if (!stepState.apply) {

@@ -1,0 +1,15 @@
+data/
+local-config.json
+__pycache__/
+.pytest_cache/
+.pytest-tmp/
+*.pyc
+node_modules/
+.quality-env/
+quality-helper/models/
+
+# Raw debugging/listening artifacts (large binaries derived from real footage audio) -
+# keep only the JSON/MD reports under validation/, not the audio/image renders.
+validation/**/*.wav
+validation/**/*.png
+validation/**/*.pkf

@@ -37,7 +37,7 @@ async function writeStem(folder, name, bytes, binary) {
 // Cache only native dialogue inference; final jobs retain the existing joint finishing.
 // Both passes upload/use clip.inputFile (raw), never a processed dialogue stem.
 async function prepareDialogueBatch(context, settings, hooks) {
-  const {request,binary,check,onJob,onProgress,say,sleep}=hooks;
+  const {request,binary,check,onJob,onProgress,say,sleep,prefetch}=hooks;
   const health=await (await request('/v1/health')).json();
   if (!health.capabilities?.includes('grouped_model_batch_v1')) throw Error('Restart the updated service to use grouped dialogue and stem processing.');
   const assets=new Map();
@@ -46,18 +46,32 @@ async function prepareDialogueBatch(context, settings, hooks) {
     const clip=context.clips[index];check();onJob(null);
     onProgress?.({phase:'dialogue',clipIndex:index,clipCount:context.clips.length});
     say(`Dialogue pass ${index+1}/${context.clips.length} - ${clip.name}`);
-    const bytes=await clip.inputFile.read({format:binary});check();
-    const asset=await (await request('/v1/assets',{method:'POST',headers:{'Content-Type':'audio/wav'},body:bytes})).json();
+    // Interleaved batch (prefetch.js): this clip may already be uploaded and its
+    // dialogue job started while later clips were exporting.
+    const early=prefetch?.take(clip.id);
+    let asset=early&&early.kind==='dialogue'?early.asset:null;
+    if(!asset) {
+      const bytes=await clip.inputFile.read({format:binary});check();
+      asset=await (await request('/v1/assets',{method:'POST',headers:{'Content-Type':'audio/wav'},body:bytes})).json();
+    }
     if(asset.sample_rate!==context.rate || asset.channels!==context.channels || Math.abs(asset.samples/asset.sample_rate-(clip.exportDuration??clip.duration))>1/context.rate) throw Error('Service read a different clip format or duration.');
     assets.set(clip.id,asset);check();
-    const submitted=await (await request('/v1/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stage_mode:'dialogue_cache',tracks:[{asset_id:asset.asset_id,role:'mixture'}],settings:cleanSettings})})).json();
-    onJob(submitted.job_id);
-    clip.dialogueStage={job_id:submitted.job_id,state:'processing'};
+    const submitStage=async()=>(await (await request('/v1/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stage_mode:'dialogue_cache',tracks:[{asset_id:asset.asset_id,role:'mixture'}],settings:cleanSettings})})).json()).job_id;
+    // An early job that failed, was cancelled or is unknown to the service is replaced once.
+    let early_job=early&&early.kind==='dialogue'&&early.jobId?early.jobId:null;
+    let stageJobId=early_job||await submitStage();
+    onJob(stageJobId);
+    clip.dialogueStage={job_id:stageJobId,state:'processing'};
     const deadline=Date.now()+90*60*1000;
     let job;
     try {
       while(true) {
-        check();job=await (await request(`/v1/jobs/${submitted.job_id}`)).json();
+        check();
+        try { job=await (await request(`/v1/jobs/${stageJobId}`)).json(); }
+        catch(error) { if(!early_job) throw error; job={status:'failed'}; }
+        if(early_job&&['failed','cancelled'].includes(job.status)) {
+          early_job=null;stageJobId=await submitStage();onJob(stageJobId);clip.dialogueStage={job_id:stageJobId,state:'processing'};continue;
+        }
         onProgress?.({phase:'dialogue',clipIndex:index,clipCount:context.clips.length,jobProgress:job.progress});
         if(job.status==='done')break;
         if(['failed','cancelled'].includes(job.status))throw Error(job.error?.message||'Dialogue pass cancelled.');
@@ -65,17 +79,17 @@ async function prepareDialogueBatch(context, settings, hooks) {
         await sleep(1000);
       }
       check();
-    } catch(error) {try{await request(`/v1/jobs/${submitted.job_id}`,{method:'DELETE'});}catch(_){}throw error;}
+    } catch(error) {try{await request(`/v1/jobs/${stageJobId}`,{method:'DELETE'});}catch(_){}throw error;}
     const result=job.result;
     if(!result || result.sample_rate!==context.rate || result.channels!==context.channels || Math.abs(result.samples/context.rate-(clip.exportDuration??clip.duration))>1/context.rate)throw Error('Cached dialogue format or duration changed.');
-    clip.dialogueStage={job_id:submitted.job_id,state:'cached',timings:result.timings||null,cache_hit:Boolean(result.stage_cache?.dialogue)};
+    clip.dialogueStage={job_id:stageJobId,state:'cached',timings:result.timings||null,cache_hit:Boolean(result.stage_cache?.dialogue)};
     await saveManifest(context,'dialogue_caching');
     onProgress?.({phase:'dialogue',clipIndex:index,clipCount:context.clips.length,done:true,reused:Boolean(result.stage_cache?.dialogue)});
   }
   onJob(null);return assets;
 }
 
-async function processBatch(context, settings, {request, binary, check, onJob, onProgress, say, sleep}) {
+async function processBatch(context, settings, {request, binary, check, onJob, onProgress, say, sleep, prefetch = null}) {
   // exportDuration is the exported WAV's length, which for an off-grid clip
   // runs one frame past the timeline span (see per-clip.js placementGeometry);
   // the service preserves the sample count, so every stem shares it.
@@ -96,7 +110,7 @@ async function processBatch(context, settings, {request, binary, check, onJob, o
   // main.js from the folder's manifest at Prepare time.
   const reusable = context.reuse && context.reuse.settings === JSON.stringify(settings) ? context.reuse.clips : null;
   const grouped = ['gap_urgenet','mossformer2'].includes(settings.enhancer) && (settings.separate_ambience || settings.separate_music);
-  const assets = grouped ? await prepareDialogueBatch(context,settings,{request,binary,check,onJob,onProgress,say,sleep}) : null;
+  const assets = grouped ? await prepareDialogueBatch(context,settings,{request,binary,check,onJob,onProgress,say,sleep,prefetch}) : null;
   if(grouped) {
     const emit=onProgress;
     onProgress=e=>emit?.({...e,phase:'stems'});
@@ -129,15 +143,22 @@ async function processBatch(context, settings, {request, binary, check, onJob, o
         continue;
       }
     }
-    say(`Clip ${index + 1}/${context.clips.length} · ${clip.name} · uploading`);
+    // Interleaved batch (prefetch.js): the upload, and usually the job, were
+    // started while later clips were exporting. Submitting the same job again
+    // returns that job (the service matches on content and settings), so one
+    // code path collects both early and normal clips.
+    const early = grouped ? null : prefetch?.take(clip.id);
+    const earlyAsset = early && early.kind === 'final' ? early.asset : null;
+    say(`Clip ${index + 1}/${context.clips.length} · ${clip.name} · ${earlyAsset ? 'collecting' : 'uploading'}`);
     const bytes = await clip.inputFile.read({format: binary});
     inspectWav(bytes, expected(clip));
     check();
-    const asset = assets?.get(clip.id) || await (await request('/v1/assets', {method: 'POST', headers: {'Content-Type': 'audio/wav'}, body: bytes})).json();
+    const asset = assets?.get(clip.id) || earlyAsset || await (await request('/v1/assets', {method: 'POST', headers: {'Content-Type': 'audio/wav'}, body: bytes})).json();
     if (asset.sample_rate !== context.rate || asset.channels !== context.channels || Math.abs(asset.samples / asset.sample_rate - wavDuration(clip)) > 1 / context.rate) throw new Error('Service read a different clip format or duration.');
     check();
     const submitted = await (await request('/v1/jobs', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tracks: [{asset_id: asset.asset_id, role: 'mixture'}], settings, ...(grouped ? {require_dialogue_cache:true} : {})})})).json();
-    if (submitted.reused) { try { await request(`/v1/assets/${asset.asset_id}`, {method: 'DELETE'}); } catch (_) {} }
+    // A reused job means this upload is a spare copy; an early upload is the job's own input.
+    if (submitted.reused && !earlyAsset) { try { await request(`/v1/assets/${asset.asset_id}`, {method: 'DELETE'}); } catch (_) {} }
     clip.jobId = submitted.job_id;
     onJob(clip.jobId);
     // Cancellation may arrive while submission is in flight.

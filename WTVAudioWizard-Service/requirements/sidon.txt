@@ -1,0 +1,3 @@
+# Rebuild Speech (Sidon) environment (Python 3.12), after torch/torchaudio 2.8.0.
+numpy>=1.26
+soundfile>=0.12

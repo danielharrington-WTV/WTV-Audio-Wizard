@@ -1,0 +1,38 @@
+{
+  "_comment": "Copy to local-config.json and fill in this machine's paths. Checksums are sha256 of the model files; the service refuses to run a model whose files differ. setup-sidon writes the sidon entry itself.",
+  "mossformer2": {
+    "python": "<path to the ClearVoice environment's python>",
+    "runtime": "<workspace>/work/mossformer-runtime",
+    "checkpoint_sha256": "<sha256>"
+  },
+  "bandit_v2": {
+    "python": "<path to the Bandit environment's python>",
+    "repo": "<workspace>/work/bandit-v2",
+    "checkpoint": "<workspace>/work/checkpoints/bandit-v2-multi.ckpt",
+    "checkpoint_sha256": "<sha256>",
+    "repo_commit": "<git commit of the bandit-v2 checkout>"
+  },
+  "gap_urgenet": {
+    "python": "<path to the GAP-URGENet environment's python>",
+    "repo": "<path to the gap-urgenet checkout>",
+    "checkpoints": "<path to its checkpoints folder>",
+    "checkpoint_hashes": {
+      "DeWavLM-Omni.pt": "<sha256>",
+      "Adapter.pt": "<sha256>",
+      "Vocoder.pt": "<sha256>",
+      "Predictor.pt": "<sha256>",
+      "PostNet.pt": "<sha256>",
+      "config.json": "<sha256>"
+    }
+  },
+  "sidon": {
+    "python": "<workspace>/work/sidon-env/Scripts/python.exe",
+    "models": "<workspace>/work/sidon-models",
+    "checkpoint_hashes": {
+      "feature_extractor_cuda.pt": "<sha256>",
+      "decoder_cuda.pt": "<sha256>"
+    },
+    "source": "https://huggingface.co/sarulab-speech/sidon-v0.1",
+    "revision": "b3b02d8bbd55fdbc410e6e46e76ef95ace4fbf52"
+  }
+}

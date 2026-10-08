@@ -1,5 +1,31 @@
 # WTVAudioWizard continuation handoff — v0.8.2
 
+## Latest — Interleaved batch: jobs start during export (2026-10-07)
+
+Dan: "change the way batch processing works so it exports then sends to the connected service, interleaving for faster processing." Panel only; the service is unchanged and needs no restart. Still panel 0.8.2.
+
+Before: Batch Process Dialogue (Per clip mode) exported every clip, then uploaded and processed them one by one, then placed them. The GPU sat idle for the whole export phase. Now each clip is uploaded and its job submitted as soon as its export is verified, while Premiere exports the next clip.
+
+How it works:
+- New `plugin/prefetch.js` (pure). `createPrefetch({settings, request, binary, sleep, isCancelled, maxActive = 4})` returns `exported(context, clip)`, `stop()`, `take(clipId)`, `abort()`, `matches(settings)`.
+- `main.js` `exportPerClipBatch` creates it (it needs the run's `context` because the job settings include the sequence sample rate) and calls `batchPrefetch?.exported(context, clip)` in three places: clips already exported when a batch is resumed, an export reused from the folder, and a fresh export.
+- `doProcess` calls `stop()` (no more early submissions; waits for the one in flight) and passes the helper to `processBatch` as `prefetch`. The existing assertions (`host.assertUnchanged`, `assertExportsUnchanged`) still run before any result is collected, so an early job only ever costs wasted GPU time, never a wrong result on the timeline.
+- `clip-batch.js` collects through `prefetch.take(clip.id)`:
+  - Normal batches: the early upload is reused and the job is submitted again as before. The service matches final jobs on content and settings and returns the early job (`reused: true`), so there is one code path. The early upload is not deleted, because it is that job's input.
+  - Mixed batches (neural cleanup plus stems): the early job is the `dialogue_cache` stage job, which the service does not de-duplicate, so pass 1 polls the early job id directly. If it failed, was cancelled or is unknown to the service, it is replaced once.
+- Limits: the service runs one job at a time and returns 429 above 8 waiting or running jobs. The helper keeps at most 4 unfinished early jobs; further exported clips wait in a local queue, and whatever is still queued when export ends is handled by the normal pass.
+- Failure handling: any error in the helper (including 429) switches it off for the run and is written to the recent-status list as "Early processing stopped: ..." for Copy report; the batch continues the old way. `runCleanDialogue` has a `finally` that calls `abort()`, which cancels early jobs that are unfinished and uncollected when a run stops, fails or is cancelled.
+- Clips the folder already holds results for (same settings) are not sent early.
+- Status line after export: "N of M clips were sent for processing during export."
+
+Effect to expect: total time approaches the longer of the export phase and the processing phase instead of their sum. With a GPU faster than Premiere's export, most clips are already done when export ends. Clips collected this way report as reused to the progress estimate, so the time-remaining figure in the processing phase is based only on clips processed after export.
+
+Not changed: Full sequence mode (one file, nothing to interleave), Rebuild Speech and Extract ambience (each already exports, uploads and places one clip at a time), the apply/placement step, the service.
+
+Tests: new `tests/prefetch.test.cjs` (13 tests, including a stand-in service with content-matched job reuse, the 4-job limit, stop while an upload is in flight, abort, failed early jobs, and a check of the three hand-off points in `main.js`). JS tests 394/394.
+
+NOT verified in Premiere. Things to watch on the first real batch: that export is not slowed by uploads running alongside it, that Cancel during export leaves no jobs running on the service, and the time saved (the timing line at the end of the run shows prepare and process seconds). For the planned shared GPU machine this matters more: with several users the 8-job service limit is shared, so `maxActive` should drop or become per-user when the multi-user queue is built.
+
 ## Latest — Panel menu and compact layout (2026-10-06)
 
 Dan confirmed tooltips show in Premiere, and asked to use the panel (tab) menu more to make the panel compact. Still panel 0.8.2.
