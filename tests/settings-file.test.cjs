@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const api=require('../plugin/settings-file.js');
 function controls(){
- const values={handleSeconds:0.5,peakFlag:-6,peakMerge:2,mode:'per_clip',enhancer:'mossformer2',dialogue:-12,music:-28,effects:-30,duck:10,speechThreshold:-40,attack:200,release:1200,qualityThreshold:1.5,loudnessTarget:-24,loudnessTolerance:1};
+ const values={handleSeconds:0.5,peakFlag:-6,peakMerge:2,mode:'per_clip',enhancer:'mossformer2',dialogue:-12,music:-28,effects:-30,duck:10,speechThreshold:-40,attack:200,release:1200,qualityThreshold:1.5,rawBlend:15,maxBoost:12,loudnessTarget:-24,loudnessTolerance:1};
  const bools=['handlesEnabled','peakMarkers','processInPlace','selectedDialogue','enableEnhancer','dialoguePostprocess','deess','autoMute','deessDeclick','ambienceStem','musicStem','duckEffects','stripMusicVolume','compressMusicBed'];
  const result=Object.fromEntries(Object.entries(values).map(([id,v])=>[id,{value:String(v)}]));
  for(const id of bools) result[id]={checked:true};
@@ -57,4 +57,12 @@ test('Auto mute is a portable setting and older files default it on (2026-10-01)
  const data=api.capture(id=>controls()[id]);assert.equal(data.values.autoMute,true);
  const old=JSON.parse(JSON.stringify(data));delete old.values.autoMute;assert.equal(api.validate(old).autoMute,true);
  const off=JSON.parse(JSON.stringify(data));off.values.autoMute=false;assert.equal(api.validate(off).autoMute,false);
+});
+
+test('Keep raw mix and Max level boost persist, validate, and older files default to 0 % and 8 dB (2026-10-09)',()=>{
+ const data=api.capture(id=>controls()[id]);
+ assert.equal(api.validate(data).rawBlend,15);assert.equal(api.validate(data).maxBoost,12);
+ for(const [key,value] of [['rawBlend',51],['rawBlend',-1],['maxBoost',25]]) {const d=JSON.parse(JSON.stringify(data));d.values[key]=value;assert.throws(()=>api.validate(d),new RegExp(key));}
+ delete data.values.rawBlend;delete data.values.maxBoost;
+ const values=api.validate(data);assert.equal(values.rawBlend,0);assert.equal(values.maxBoost,8);
 });

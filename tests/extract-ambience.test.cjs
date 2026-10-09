@@ -187,7 +187,7 @@ test('happy path: adds a new Ambience track and places the extracted clip; origi
   assert.equal(original.trackMeta[1].name, 'Ambience');
   assert.ok(s.calls.includes('render'));
   assert.ok(s.calls.includes('WTV: add ambience track'));
-  assert.equal(s.assets.size, 0); // temp asset cleaned up
+  assert.equal(s.assets.size, 1); // the job keeps its upload; the service's age-based cleanup removes it later
 });
 
 test('batch: multiple selected clips land on the same new Ambience track (insert once, then overwrite)', async () => {

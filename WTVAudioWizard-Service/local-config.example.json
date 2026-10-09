@@ -1,5 +1,6 @@
 {
-  "_comment": "Copy to local-config.json and fill in this machine's paths. Checksums are sha256 of the model files; the service refuses to run a model whose files differ. setup-sidon writes the sidon entry itself.",
+  "_comment": "Copy to local-config.json and fill in this machine's paths. Checksums are sha256 of the model files; the service refuses to run a model whose files differ. setup-sidon writes the sidon entry itself. retention_days: days the service keeps unused uploads, results and cache in its data folder (0 = keep everything; default 14).",
+  "retention_days": 14,
   "mossformer2": {
     "python": "<path to the ClearVoice environment's python>",
     "runtime": "<workspace>/work/mossformer-runtime",

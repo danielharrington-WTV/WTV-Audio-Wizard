@@ -1,6 +1,7 @@
 """Immutable local inference artifacts, separate from levels/ducking/repair."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -52,10 +53,12 @@ class StageCache:
             if manifest['key']!=key or sorted(manifest['files'])!=sorted(names): return None
             for name in names:
                 if Path(name).name!=name or digest_file(folder/name)!=manifest['files'][name]: return None
+            try: os.utime(folder)  # Last used, for storage_cleanup.
+            except OSError: pass
             return {'folder':folder,'metadata':manifest['metadata']}
         except (OSError,ValueError,KeyError,TypeError): return None
 
-    def put(self,key,files,metadata,check):
+    def put(self,key,files,metadata,check,replace=False):
         destination=self._folder(key)
         self.root.mkdir(exist_ok=True)
         temp=self.root/(key+'.tmp-'+uuid.uuid4().hex)
@@ -69,6 +72,11 @@ class StageCache:
             (temp/'manifest.json').write_text(json.dumps({'key':key,'files':hashes,'metadata':metadata},allow_nan=False),encoding='utf-8')
             check()
             if destination.exists():
+                if replace:
+                    # A fresh run (panel "Don't use cached files") supersedes the stored entry.
+                    old=self.root/(key+'.old-'+uuid.uuid4().hex)
+                    destination.rename(old);temp.rename(destination);shutil.rmtree(old,ignore_errors=True)
+                    return
                 if self.get(key,list(files)): return
                 # Retain corrupt artifacts for diagnosis; never overwrite files
                 # in job/Premiere output directories.

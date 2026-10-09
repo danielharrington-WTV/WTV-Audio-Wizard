@@ -201,7 +201,9 @@ async function extractOne(project, sequence, entry, {fs, binary, request, say, s
   } finally {
     if ((!exportStarted || exportVerified) && !renderDeleted) { try { await project.deleteSequence(render); } catch (_) {} }
     if ((!exportStarted || exportVerified) && scratchFile) { try { await scratchFile.delete(); } catch (_) {} }
-    if (assetId) { try { await request(`/v1/assets/${assetId}`, {method: 'DELETE'}); } catch (_) {} }
+    // Only an upload that never reached a job is removed here. Once a job uses it the
+    // service keeps it (DELETE would answer 409) and its age-based cleanup removes it.
+    if (assetId && !jobId) { try { await request(`/v1/assets/${assetId}`, {method: 'DELETE'}); } catch (_) {} }
     if (jobId) { try { await request(`/v1/jobs/${jobId}`, {method: 'DELETE'}); } catch (_) {} }
   }
 }

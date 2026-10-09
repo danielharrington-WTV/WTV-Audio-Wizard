@@ -43,5 +43,6 @@ def test_pinned_lists_are_complete_and_the_config_matches_the_service(tmp_path, 
     setup.write_config({'sidon': {'python': 'p'}})
     setup.write_config({'mossformer2': {'python': 'q'}})
     import json
-    assert set(json.loads((tmp_path / 'local-config.json').read_text())) == {'sidon', 'mossformer2'}
+    written = json.loads((tmp_path / 'local-config.json').read_text())
+    assert set(written) == {'sidon', 'mossformer2', 'retention_days'} and written['retention_days'] == 7
     assert len(list(tmp_path.glob('local-config.json.bak-*'))) == 1

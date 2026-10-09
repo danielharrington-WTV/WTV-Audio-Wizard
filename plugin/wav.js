@@ -108,4 +108,39 @@ async function waitForStableWavFile(nativePath, expected, {io, check = () => {},
   throw new Error('Export timed out. Wait for Premiere to finish all exports, then click Batch Process Dialogue again.');
 }
 
-module.exports = {inspectWav, peakDbfsFromWav, waitForStableWav, waitForStableWavFile};
+// Digital-silence check (2026-10-09). An export made while its track or clip was
+// muted is all zeros; before this it was kept, reused on every rerun and sent to
+// the service, giving silent results. Reads in bounded blocks and stops at the
+// first sample above the threshold, so ordinary audio costs one small read.
+// Real dialogue, even quiet room tone, is far above -90 dBFS.
+// peakDb: the peak when silent; otherwise the first level found above the threshold.
+const SILENCE_DBFS = -90;
+async function wavSilence(nativePath, expected, {io, check = () => {}, thresholdDb = SILENCE_DBFS} = {}) {
+  io = io || require('fs');
+  const {header, exact, sample} = require('./music-wav.js');
+  const limit = Math.pow(10, thresholdDb / 20);
+  let fd;
+  try {
+    const stat = await io.lstat(nativePath);
+    fd = await io.open(nativePath, 'r');
+    const format = await header(io, fd, stat.size, expected);
+    const width = format.bits / 8;
+    const block = Math.max(1, Math.floor((1 << 20) / format.align)) * format.align;
+    let peak = 0;
+    for (let offset = 0; offset < format.dataBytes; offset += block) {
+      check();
+      const length = Math.min(block, format.dataBytes - offset);
+      const view = await exact(io, fd, format.dataOffset + offset, length);
+      for (let i = 0; i < length; i += width) {
+        const value = Math.abs(sample(view, i, format.code, format.bits));
+        if (value > peak) {
+          peak = value;
+          if (peak > limit) return {silent: false, peakDb: Math.round(20 * Math.log10(peak) * 10) / 10};
+        }
+      }
+    }
+    return {silent: true, peakDb: peak ? Math.round(20 * Math.log10(peak) * 10) / 10 : null};
+  } finally { if (fd !== undefined) { try { await io.close(fd); } catch (_) {} } }
+}
+
+module.exports = {inspectWav, peakDbfsFromWav, waitForStableWav, waitForStableWavFile, wavSilence, SILENCE_DBFS};

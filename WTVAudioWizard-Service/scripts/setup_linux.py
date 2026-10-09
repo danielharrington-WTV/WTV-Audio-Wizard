@@ -31,7 +31,10 @@ import urllib.error
 import urllib.request
 
 PROJECT = Path(__file__).resolve().parents[1]
-WORKSPACE = Path(os.environ.get('WTV_WORKSPACE') or PROJECT.parent).resolve()
+sys.path.insert(0, str(PROJECT))
+from service.workspace import find_workspace  # noqa: E402  (standard library only)
+# An existing workspace above the service folder is reused; otherwise work/ goes beside it.
+WORKSPACE = find_workspace(PROJECT, default_levels=1)
 WORK = WORKSPACE / 'work'
 CONFIG = Path(os.environ.get('WTV_CONFIG') or PROJECT / 'local-config.json')
 PARTS = ('service', 'gap_urgenet', 'bandit_v2', 'mossformer2', 'sidon')
@@ -290,12 +293,17 @@ def import_check(python, repo, statement, label):
     say(f'{label}: model code imports.')
 
 
+SHARED_RETENTION_DAYS = 7
+
+
 def write_config(entries):
     if PLAN:
         say(f'would write {", ".join(entries)} to {CONFIG}')
         return
     config = json.loads(CONFIG.read_text(encoding='utf-8')) if CONFIG.exists() else {}
     merged = {**config, **entries}
+    # Shared office machine: keep unused service data 7 days (the service default is 14).
+    merged.setdefault('retention_days', SHARED_RETENTION_DAYS)
     if merged == config:
         say('local-config.json is already up to date.')
         return

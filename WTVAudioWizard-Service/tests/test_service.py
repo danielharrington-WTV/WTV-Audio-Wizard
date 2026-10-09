@@ -370,6 +370,20 @@ def test_cache_reuse_is_busted_by_a_dsp_code_change(client, monkeypatch):
         'a DSP code change must bust the cache even when settings/inputs are identical, else it silently serves stale pre-fix output'
     )
 
+def test_fresh_job_is_not_reused_and_is_advertised(client):
+    # Panel "Don't use cached files" (2026-10-09): fresh:true runs again.
+    c, app = client
+    assert 'fresh_jobs_v1' in c.get('/v1/health').json()['capabilities']
+    x = .02 * np.sin(2 * np.pi * 300 * np.arange(48000) / 48000)
+    tracks = lambda: [{'asset_id': upload(c, x), 'role': role} for role in ('dialogue', 'music', 'effects')]
+    request = {'tracks': tracks(), 'settings': {'separator': 'provided_stems', 'enhancer': 'none', 'deess_declick': True}}
+    first = c.post('/v1/jobs', json=request).json()
+    wait(c, first['job_id'])
+    request['tracks'] = tracks()
+    again = c.post('/v1/jobs', json={**request, 'fresh': True}).json()
+    assert again['reused'] is False and again['job_id'] != first['job_id']
+    assert wait(c, again['job_id'])['status'] == 'done'
+
 def test_cancel_queued_job(client, monkeypatch):
     c, app = client
     gate = threading.Event()

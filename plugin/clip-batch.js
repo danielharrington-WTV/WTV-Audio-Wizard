@@ -122,7 +122,8 @@ async function processBatch(context, settings, {request, binary, check, onJob, o
     check(); onJob(null);
     onProgress?.({clipIndex: index, clipCount: context.clips.length});
     const previous = reusable && reusable[clip.id];
-    if (previous && (!clip.handles || previous.export_identity === clip.exportIdentity) && previous.result && previous.outputs && (context.outputStems || ['dialogue']).every(stem => previous.outputs[stem])) {
+    // freshExport: this run exported new audio for the clip (main.js), so an older result may not match it.
+    if (previous && !clip.freshExport && (!clip.handles || previous.export_identity === clip.exportIdentity) && previous.result && previous.outputs && (context.outputStems || ['dialogue']).every(stem => previous.outputs[stem])) {
       let ok = true;
       const outputs = {};
       for (const stem of context.outputStems || ['dialogue']) {

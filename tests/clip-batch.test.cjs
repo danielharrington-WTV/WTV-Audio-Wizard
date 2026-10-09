@@ -209,3 +209,15 @@ test('cancellation after dialogue submission cancels that job and never starts B
  assert.equal(requests.filter(([p])=>p==='/v1/jobs').length,1);
  assert.equal(requests.filter(([p,m])=>p.startsWith('/v1/jobs/') && m==='DELETE').length,1);
 });
+
+
+test('a freshly exported clip never reuses an older processed result',async()=>{
+ const {context,hooks,requests,files}=setup();context.folder.getEntry=async name=>{if(!files.has(name))throw Error('missing');return files.get(name);};
+ const settings={};
+ await processBatch(context,settings,hooks);
+ const manifest=JSON.parse(files.get('clip-batch.json').bytes);
+ context.reuse={settings:JSON.stringify(settings),clips:Object.fromEntries(manifest.clips.map(c=>[c.id,c]))};
+ requests.length=0;await processBatch(context,settings,hooks);assert.equal(requests.length,0);
+ context.clips[0].freshExport=true;
+ requests.length=0;await processBatch(context,settings,hooks);assert.equal(requests.filter(([p])=>p==='/v1/jobs').length,1);
+});

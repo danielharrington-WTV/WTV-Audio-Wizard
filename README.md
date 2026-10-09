@@ -1,15 +1,15 @@
 # WTVAudioWizard — panel 0.8.2, service 0.7.1
 
-## Current state (2026-10-06)
+## Current state (2026-10-09)
 
 **Panel 0.8.2** (2026-10-06) is 0.8.1 plus everything added since 2026-09-29: Rebuild Speech, the Batch Process Options menu (first called Processing) with separate Level and De-ess, live progress, Mute raw when done, the renames below, and the per-project export folder with its `WTVAudioWizard` subfolder. The service is still version 0.7.1 and the panel still requires exactly that, so only the plugin needs reloading for the version change. Settings files and saved preferences from 0.8.1 load unchanged.
 
-This folder holds the Premiere panel (`plugin/`), its tests, the operator guide (`docs/`), research notes and `HANDOFF.md`. The audio service now lives in its own folder beside this one, `..\WTVAudioWizard-Service`, with its own README. Any `service`, `runners`, `scripts`, `requirements.lock.txt`, `start-service.ps1`, `setup-sidon.bat` or `local-config.json` still in this folder are leftover duplicates from before the split and are no longer the copies to edit or run.
+This folder holds the Premiere panel (`plugin/`), its tests, the operator guide (`docs/`), research notes and `HANDOFF.md`. The audio service lives in its own subfolder, `WTVAudioWizard-Service`, with its own README; it can be deployed separately. The old copies from before the split have been removed.
 
 **Start the service (Windows):**
 
 ```powershell
-& 'C:\Users\Dan\Documents\Codex\2026-09-05\files-pasted-by-the-user-wtvaudiowizard\outputs\WTVAudioWizard-Service\start-service.ps1'
+& 'C:\Users\Dan\Documents\Codex\2026-09-05\files-pasted-by-the-user-wtvaudiowizard\outputs\WTVAudioWizard\WTVAudioWizard-Service\start-service.ps1'
 ```
 
 Then load `plugin/manifest.json` in UXP Developer Tool, open Connection in the panel, paste the token the service prints and click Connect.
@@ -27,6 +27,8 @@ Then load `plugin/manifest.json` in UXP Developer Tool, open Connection in the p
 
 Batch Process Dialogue is one button; the numbered steps 1 to 4 described in older sections were merged into it. Its steps are chosen in the **+ Batch Process Options** menu under the button. **Mute raw when done** (on by default) decides whether Batch Process Dialogue and Rebuild Speech silence the originals they replace. Only the button was renamed: the tracks it adds are still called **Clean dialogue**, and the Options group is still **Clean dialogue**.
 
+**Stem separation preset (2026-10-08).** A built-in preset that starts from the factory settings with Extract ambience stem and Extract music stem ticked, so Batch Process Dialogue returns dialogue, music and ambience/sound-effects tracks. Dialogue still comes from neural cleanup of the raw clip; Bandit v2 supplies the other two.
+
 **Interleaved batch (2026-10-07).** In Per clip mode, Batch Process Dialogue now sends each clip to the service as soon as its export finishes, instead of exporting everything first. The GPU works while Premiere exports the remaining clips; the processing phase then collects results that are already done or under way. If the service cannot take early jobs, the batch continues the old way. No service change or restart is needed. Not yet run in Premiere.
 
 **Panel menu and compact layout (2026-10-06).** The menu on the panel's tab offers Copy report, Open export folder, Change export folder, Connection settings, Save settings, Load settings and **Compact panel**. Compact panel (off by default, remembered) hides Copy report, Change, an idle Cancel, and the Connection row while connected, leaving a green dot in the heading. Everything hidden is in the menu, and the layout can only be switched from the menu, so a Premiere build that shows no menu loses nothing. Not yet seen in Premiere.
@@ -35,7 +37,13 @@ Batch Process Dialogue is one button; the numbered steps 1 to 4 described in old
 
 **Shared GPU machine (planned).** The service is being prepared to run on a Debian PC (RTX 3060 12 GB) for the four office Macs, on the office network only, while the Windows PC keeps its local service. The service folder already has a Debian installer and start script; the network and multi-user parts are not built, and the panel still only accepts a service on the same computer. The plan and its status are at the top of [HANDOFF.md](HANDOFF.md).
 
-**Not yet checked in Premiere:** everything changed since 2026-09-29 (Batch Process Options menu, live progress, Mute raw when done, renames including Batch Process Dialogue, export folder changes) and starting the service from its new folder.
+**Service storage cleanup (2026-10-09).** The service removes what it has not used for 14 days (7 on the shared machine) from its own data folder: finished jobs and their results, uploads, dialogue cache. Results the panel already saved in the project export folder are never touched; a cleaned-up job is just processed again if rerun. Restart the service to use it. Details in the service README.
+
+**Presets retuned, clip handles on, Don't use cached files (2026-10-09).** Clip handles are on at 0.5 s for every preset. Promo/Action keeps 15% of the raw clip under the cleaned voice (new **Keep raw mix** setting), dialogue -10 dBFS, music ducked 12 dB with 100 ms attack / 800 ms release. Interview stays fully clean with 250 / 1500 ms ducking and a -45 dBFS speech floor. Camcorder keeps 10% raw, turns on De-click, allows 12 dB of boost (new **Max level boost** setting) and uses a -48 dBFS speech floor. On first load the panel resets those three presets' last-used settings to the new defaults and turns handles on in every other saved preset. **Don't use cached files** in the panel menu (global, remembered) exports, analyses and processes everything again; it needs the updated service (restart it).
+
+**Silent exports rejected (2026-10-09).** Batch Process Dialogue checks every clip export for digital silence (peak below -90 dBFS), which happens when the track or clip was muted. A silent export is not kept and is not sent to the service; the batch finishes the other exports and then names the silent clips so they can be fixed and the button clicked again. A silent export left in the folder by an earlier run is exported again instead of reused, and a clip exported afresh never reuses an older processed result. Full sequence mode refuses a silent export the same way.
+
+**Checked in Premiere (2026-10-09):** everything changed since 2026-09-29, including the panel menu, compact layout, interleaved batch, renames, Stem separation preset, export folder and plain-text token field.
 
 
 **Clean Dialogue Processing menu (2026-09-29):** the processing steps now sit in a collapsible **+ Processing** menu directly under the Clean Dialogue button on Main (collapsed by default, remembered). In pipeline order: Neural cleanup (with the GAP-URGENet / MossFormer2 choice), Level & compress, De-ess, De-click · Exp., Extract ambience stem, Extract music stem. Collapsed, a one-line summary shows what will run. **Level & compress and De-ess are now separate checkboxes** (previously one "Level, limit & de-ess"); older presets and settings files keep de-ess matched to their old Level setting. Clean Dialogue greys out when nothing is ticked, and the menu locks while anything runs. Options > Clean dialogue keeps only the setup choices: Source, Selected clips only, Process in place, clip handles. Restart the service (for the separate De-ess setting) and reload the panel.
@@ -133,7 +141,7 @@ Track renaming is optional because the installed Premiere build does not expose 
 2. Run the following command in PowerShell and keep the window open:
 
    ```powershell
-   & 'C:\Users\Dan\Documents\Codex\2026-09-05\files-pasted-by-the-user-wtvaudiowizard\outputs\WTVAudioWizard-Service\start-service.ps1'
+   & 'C:\Users\Dan\Documents\Codex\2026-09-05\files-pasted-by-the-user-wtvaudiowizard\outputs\WTVAudioWizard\WTVAudioWizard-Service\start-service.ps1'
    ```
 
 3. In UXP Developer Tool, unload the old plugin and use **Load & Watch** with this build's `plugin/manifest.json`. Keep the complete plugin folder together. The panel should show **v0.8.2**.
@@ -167,10 +175,10 @@ Preview limits: 250 enabled clips per batch, 512 MiB upload per WAV, mono/stereo
 ## Files and configuration
 
 - `plugin/`: UXP panel, Premiere adapters, six bundled WAV export presets. `click-pop-report.js` and `clip-batch.js`'s `clickPopEvents()` provide the optional repair report.
-- `..\WTVAudioWizard-Service\service/`: authenticated FastAPI job service, cancellation, cache, normalization, ducking, de-click/de-ess (`deess.py`, explicit opt-in in the panel and API) and seeded single-location pop attenuation (`deplosive.py`, `/v1/deplosive`).
-- `..\WTVAudioWizard-Service\runners/`: real Bandit v2, MossFormer2, GAP-URGENet and Sidon (`sidon.py`, with the vendored MIT `sidon_features.py`) workers.
-- `..\WTVAudioWizard-Service\setup-sidon.bat` / `scripts/setup_sidon.py`: installs Sidon for Rebuild Speech on Windows; `scripts/validate-restore.bat` checks it end to end. `setup-linux.sh` / `start-service.sh` install and start the service on Debian.
-- `..\WTVAudioWizard-Service\local-config.json`: this machine's environment paths and pinned checkpoint checksums (one per machine, never copied between machines).
+- `WTVAudioWizard-Service\service/`: authenticated FastAPI job service, cancellation, cache, normalization, ducking, de-click/de-ess (`deess.py`, explicit opt-in in the panel and API) and seeded single-location pop attenuation (`deplosive.py`, `/v1/deplosive`).
+- `WTVAudioWizard-Service\runners/`: real Bandit v2, MossFormer2, GAP-URGENet and Sidon (`sidon.py`, with the vendored MIT `sidon_features.py`) workers.
+- `WTVAudioWizard-Service\setup-sidon.bat` / `scripts/setup_sidon.py`: installs Sidon for Rebuild Speech on Windows; `scripts/validate-restore.bat` checks it end to end. `setup-linux.sh` / `start-service.sh` install and start the service on Debian.
+- `WTVAudioWizard-Service\local-config.json`: this machine's environment paths and pinned checkpoint checksums (one per machine, never copied between machines).
 - `docs/`: the operator guide.
 - `PER-CLIP-MODE.md`: lane mapping and Premiere acceptance steps.
 - `research/`: planning deliverables and background research — start at [project-planning.html](research/project-planning.html) or [README.md](research/README.md).
@@ -200,7 +208,7 @@ Panel tests, from this directory:
 node --test tests/*.test.cjs
 ```
 
-Service tests, from `..\WTVAudioWizard-Service`:
+Service tests, from `WTVAudioWizard-Service`:
 
 ```powershell
 & ..\..\work\service-env\Scripts\python.exe -m pytest tests -q

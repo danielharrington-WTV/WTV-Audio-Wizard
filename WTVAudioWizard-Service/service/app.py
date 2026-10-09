@@ -28,11 +28,13 @@ from .leveler import level_dialogue
 from .lowend import enhance_low_end
 from .deplosive import attenuate_pop
 from .music import MusicAnalysis, analyze as analyze_music
+from .workspace import find_workspace
+from . import storage_cleanup
 
 BASE = Path(__file__).resolve().parents[1]
-# Data folder: WTV_DATA_DIR, else <workspace>/work/wtv-data. The workspace is
-# WTV_WORKSPACE, else two folders above this one (the original Windows layout).
-ROOT = Path(os.environ.get('WTV_DATA_DIR') or Path(os.environ.get('WTV_WORKSPACE') or BASE.parents[1]) / 'work' / 'wtv-data').resolve()
+# Data folder: WTV_DATA_DIR, else <workspace>/work/wtv-data (see workspace.py
+# for how the workspace is found).
+ROOT = Path(os.environ.get('WTV_DATA_DIR') or find_workspace(BASE) / 'work' / 'wtv-data').resolve()
 ROOT.mkdir(parents=True, exist_ok=True)
 TOKEN_PATH = ROOT / 'token.txt'
 if not TOKEN_PATH.exists():
@@ -40,6 +42,12 @@ if not TOKEN_PATH.exists():
 TOKEN = TOKEN_PATH.read_text().strip()
 CONFIG_PATH = Path(os.environ.get('WTV_CONFIG', BASE / 'local-config.json'))
 CONFIG = json.loads(CONFIG_PATH.read_text()) if CONFIG_PATH.exists() else {}
+try:
+    RETENTION_DAYS = storage_cleanup.retention_days(CONFIG)
+except ValueError as error:
+    print(f'local-config.json: {error}; using {storage_cleanup.DEFAULT_RETENTION_DAYS} days.', flush=True)
+    RETENTION_DAYS = storage_cleanup.DEFAULT_RETENTION_DAYS
+CLEANUP_INTERVAL_SECONDS = 3600
 
 def _hash_files(*paths):
     """SHA-256 over the concatenated bytes of the given files. Included in the
@@ -72,6 +80,32 @@ def save(job):
     temp.write_text(json.dumps(job, indent=2, allow_nan=False))
     temp.replace(destination)
 
+def clean_storage(when_idle=False):
+    """Remove data-folder items unused for RETENTION_DAYS (service/storage_cleanup.py).
+    Runs under LOCK so no new job can pick up an upload while it is being removed.
+    The panel's own result files live in the project export folder and are never touched."""
+    with LOCK:
+        busy = {jid for jid, job in JOBS.items() if job['status'] in ('queued', 'running')}
+        if when_idle and (busy or any(j['status'] in ('queued', 'running') for j in QUALITY_JOBS.values())):
+            return None
+        found = storage_cleanup.plan(ROOT, RETENTION_DAYS, busy=busy, pinned=set(ASSET_PINS))
+        if not found['paths']:
+            return found
+        freed, failed = storage_cleanup.execute(found)
+        for jid in found['jobs']:
+            JOBS.pop(jid, None)
+            CANCEL.pop(jid, None)
+    line = storage_cleanup.summary(found, freed, RETENTION_DAYS)
+    print(line + (f' ({len(failed)} could not be removed and will be retried)' if failed else ''), flush=True)
+    return found
+
+def clean_storage_every_hour(stop):
+    while not stop.wait(CLEANUP_INTERVAL_SECONDS):
+        try:
+            clean_storage(when_idle=True)
+        except Exception as error:  # Cleanup must never stop the service.
+            print(f'Cleanup skipped: {error}', flush=True)
+
 def update(jid, **fields):
     with LOCK:
         JOBS[jid].update(fields)
@@ -91,7 +125,14 @@ async def lifespan(app):
             job.update(status='failed', error={'code': 'service_restarted', 'message': 'Service stopped before job completion; submit again.'})
             save(job)
         JOBS[job['job_id']] = job
+    try:
+        clean_storage()
+    except Exception as error:  # Cleanup must never stop the service starting.
+        print(f'Cleanup skipped: {error}', flush=True)
+    stop_cleanup = threading.Event()
+    threading.Thread(target=clean_storage_every_hour, args=(stop_cleanup,), daemon=True, name='storage-cleanup').start()
     yield
+    stop_cleanup.set()
     for event in CANCEL.values():
         event.set()
     for event in QUALITY_CANCEL.values():
@@ -136,7 +177,7 @@ def sidon_ready():
 
 @app.get('/v1/health', dependencies=[Depends(auth)])
 def health():
-    return {'status': 'ok', 'capabilities': ['grouped_model_batch_v1', 'dnsmos_quality_v1', 'sidon_restore_v1'], 'api_version': 1, 'service_version': '0.7.1', 'models': [
+    return {'status': 'ok', 'capabilities': ['grouped_model_batch_v1', 'dnsmos_quality_v1', 'sidon_restore_v1', 'fresh_jobs_v1'], 'api_version': 1, 'service_version': '0.7.1', 'models': [
         {'id': 'bandit_v2', 'default': True, 'available': bandit_ready(), 'native_rate': 48000, 'native_channels': 1, 'stereo_policy': 'independent_channels'},
         {'id': 'gap_urgenet', 'available': gap_ready(), 'task': 'raw_dialogue_cleanup'},
         {'id': 'mossformer2', 'available': mossformer_ready(), 'task': 'dialogue_cleanup'},
@@ -298,6 +339,7 @@ def music_analysis(body: MusicAnalysis):
 def download_asset(aid: str):
     if not (ROOT / f'{aid}.json').is_file():
         raise HTTPException(404, 'Unknown asset')
+    storage_cleanup.touch(ROOT / f'{aid}.json')
     return FileResponse(ROOT / f'{aid}.wav', media_type='audio/wav', filename=f'{aid}.wav')
 
 @app.post('/v1/deplosive', dependencies=[Depends(auth)])
@@ -397,9 +439,12 @@ def submit(body: JobRequest):
     with LOCK:
         if any(not (ROOT / f'{track.asset_id}.wav').is_file() for track in body.tracks):
             raise HTTPException(404, 'Uploaded asset was removed; upload again')
+        for track in body.tracks:
+            storage_cleanup.touch(ROOT / f'{track.asset_id}.json')
         for job in JOBS.values():
-            if body.stage_mode != 'dialogue_cache' and job['cache_key'] == cache_key and job['status'] in ('queued', 'running', 'done'):
+            if not body.fresh and body.stage_mode != 'dialogue_cache' and job['cache_key'] == cache_key and job['status'] in ('queued', 'running', 'done'):
                 if job['status'] != 'done' or all((ROOT / job['job_id'] / 'result' / f'{s}.wav').exists() for s in body.settings.output_stems + ['mix']):
+                    storage_cleanup.touch(ROOT / f"job-{job['job_id']}.json")
                     return {'job_id': job['job_id'], 'reused': True}
         if sum(j['status'] in ('queued', 'running') for j in JOBS.values()) >= 8:
             raise HTTPException(429, 'Queue is full')
@@ -430,6 +475,7 @@ def result(jid: str, stem: str):
         raise HTTPException(409, 'Result is not complete')
     if stem not in job.get('result', {}).get('stems', []):
         raise HTTPException(404, 'Stem was not requested')
+    storage_cleanup.touch(ROOT / f'job-{jid}.json')
     return FileResponse(ROOT / jid / 'result' / f'{stem}.wav', media_type='audio/wav', filename=f'{jid}-{stem}.wav')
 
 class Cancelled(Exception):
@@ -503,7 +549,7 @@ def run_job(jid):
                 mid=JOBS[jid]['model_ids'][name]
                 key=identity({'stage':'separate-v1','source':sources['mixture']['sha256'],'model':mid,'heads':heads,'window':8,'hop':1})
                 names=[h+'.wav' for h in heads]
-                hit=cache.get(key,names);cache_status['separation']=bool(hit)
+                hit=None if body.fresh else cache.get(key,names);cache_status['separation']=bool(hit)
                 raw=hit['folder'] if hit else folder/'separated'
                 if not hit:
                     update(jid,stage='separating',progress=10)
@@ -517,7 +563,7 @@ def run_job(jid):
                 for role,head in [('music','music'),('effects','sfx')]:
                     if head in heads: stems[role]=aligned(read_audio(raw/(head+'.wav'),body.settings.output_rate),expected,source['channels'])
                 unchanged_model(name)
-                if not hit: cache.put(key,{n:raw/n for n in names},{'benchmark':benchmark},check)
+                if not hit: cache.put(key,{n:raw/n for n in names},{'benchmark':benchmark},check,replace=body.fresh)
                 timings['separation_seconds']=time.perf_counter()-t0
             stems['dialogue']=read_audio(ROOT/f'{body.tracks[0].asset_id}.wav',body.settings.output_rate)
         check()
@@ -527,7 +573,8 @@ def run_job(jid):
             # Output rate belongs here because the existing conversion policy is
             # source -> output rate -> 48k. Level, repair and stem options do not.
             key=identity({'stage':'clean-v1','source':source['sha256'],'model':mid,'conversion_rate':body.settings.output_rate})
-            hit=cache.get(key,['dialogue.wav']);cache_status['dialogue']=bool(hit)
+            # fresh skips the cache, except a final job that must use the dialogue pass its own stage job just made.
+            hit=None if body.fresh and not body.require_dialogue_cache else cache.get(key,['dialogue.wav']);cache_status['dialogue']=bool(hit)
             output_file=hit['folder']/'dialogue.wav' if hit else folder/'dialogue-clean.wav'
             if not hit and body.require_dialogue_cache:
                 raise ValueError('Prepared dialogue cache is missing or changed. Retry Clean audio to rebuild the dialogue pass.')
@@ -551,7 +598,7 @@ def run_job(jid):
             cleaned=aligned(cleaned,len(stems['dialogue']),stems['dialogue'].shape[1])
             stems['dialogue']=blend_dialogue(stems['dialogue'],cleaned,body.settings.enhancer_wet)
             unchanged_model(name)
-            if not hit: cache.put(key,{'dialogue.wav':output_file},{'enhancement':enhancement},check)
+            if not hit: cache.put(key,{'dialogue.wav':output_file},{'enhancement':enhancement},check,replace=body.fresh)
             if body.stage_mode == 'dialogue_cache':
                 check()
                 update(jid,status='done',stage='dialogue cached',progress=100,result={

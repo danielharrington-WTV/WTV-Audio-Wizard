@@ -200,7 +200,7 @@ test('happy path: Sidon job, restored clip on a new Restored speech track, origi
   assert.equal(original.entries[0].sourceId, 'clip-1-original', 'original clip stays in place');
   assert.deepEqual(s.silenced.map(c => [c.trackIndex, c.name, c.start.seconds, c.end.seconds]), [[0, 'clip-1', 0, 4]]);
   assert.ok(s.calls.includes('WTV: add rebuilt speech track'));
-  assert.equal(s.assets.size, 0);
+  assert.equal(s.assets.size, 1); // the job keeps its upload; the service's age-based cleanup removes it later
   const [job] = [...s.jobs.values()];
   assert.equal(job, undefined, 'job deleted after download');
 });

@@ -29,7 +29,7 @@ test('the menu is registered for the manifest panel id with a no-op show handler
   const panel = h.config().panels.wtvAudioWizard;
   assert.equal(typeof panel.show, 'function');
   assert.equal(typeof panel.invokeMenu, 'function');
-  assert.deepEqual(panel.menuItems.filter(i => i !== '-').map(i => i.label), ['Copy report', 'Open export folder', 'Change export folder…', 'Connection settings', 'Save settings…', 'Load settings…', 'Compact panel', 'WTVAudioWizard v9.9.9']);
+  assert.deepEqual(panel.menuItems.filter(i => i !== '-').map(i => i.label), ['Copy report', 'Open export folder', 'Change export folder…', 'Connection settings', 'Save settings…', 'Load settings…', 'Compact panel', "Don't use cached files", 'WTVAudioWizard v9.9.9']);
   assert.equal(panel.menuItems.at(-1).enabled, false);
 });
 
@@ -78,4 +78,16 @@ test('compact layout only hides controls the menu offers, and can only be turned
   const main = read('main.js');
   assert.equal((main.match(/setCompact\(/g) || []).length, 1, 'setCompact is only defined, never called outside the menu hook');
   assert.ok(main.includes("document.body.classList.toggle('is-connected', connected)"));
+});
+
+test("Don't use cached files toggles through its hooks and ticks its own item", () => {
+  const items = {noCache: {checked: false}}, calls = [];
+  let state = false;
+  const menu = createMenu({entrypoints: {setup() {}, getPanel: () => ({menuItems: {getItem: id => items[id]}})}, panelId: 'p', version: '1', hooks: {
+    click() {}, toggleConnection() {}, getCompact: () => false, setCompact() {},
+    getNoCache: () => state, setNoCache: value => { state = value; calls.push(value); },
+  }});
+  menu.invoke('noCache'); assert.equal(state, true); assert.equal(items.noCache.checked, true);
+  menu.invoke('noCache'); assert.deepEqual(calls, [true, false]); assert.equal(items.noCache.checked, false);
+  assert.equal(menuItems({version: '1', noCache: true}).find(i => i.id === 'noCache').checked, true);
 });

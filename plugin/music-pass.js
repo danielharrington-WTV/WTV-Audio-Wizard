@@ -256,7 +256,7 @@ function padSummary(summary,offsetSeconds,duration) {
   for(let i=0;i<n;i++){levels[offset+i]=summary.levels[i];peaks[offset+i]=summary.peaks[i];}
   return {...summary,levels,peaks,samples:fullSamples};
 }
-async function run(context, settings, {fs,binary,check,say,sleep,storage,onPlan=()=>{},dialogueReference,onReference=()=>{},onProgress=()=>{}}) {
+async function run(context, settings, {fs,binary,check,say,sleep,storage,noCache=false,onPlan=()=>{},dialogueReference,onReference=()=>{},onProgress=()=>{}}) {
   for(const [name,min,max] of [['duck_db',0,30],['attack_ms',10,1000],['release_ms',50,3000],['threshold_dbfs',-60,-15]]) {
     if(settings[name]!==undefined && (!Number.isFinite(settings[name]) || settings[name]<min || settings[name]>max)) throw Error(`${name} must be between ${min} and ${max}.`);
   }
@@ -366,8 +366,10 @@ async function run(context, settings, {fs,binary,check,say,sleep,storage,onPlan=
   const progressStage = (label, percent) => onProgress({stage: label, percent: Math.max(0, Math.min(100, percent))});
   let analysisCacheResult='miss';
   let cachedSummaries=null;
-  try { cachedSummaries=await loadAnalysisCache(fs, storage, fingerprint, expected); } catch (_) { cachedSummaries=null; }
-  if(!cachedSummaries && !spanIsFull) { try { cachedSummaries=await loadAnalysisCache(fs, storage, fullFingerprint, expected); } catch (_) { cachedSummaries=null; } }
+  // noCache: the panel's "Don't use cached files" (2026-10-09) - analyse afresh; the result is still saved.
+  if(noCache) analysisCacheResult='skipped';
+  else try { cachedSummaries=await loadAnalysisCache(fs, storage, fingerprint, expected); } catch (_) { cachedSummaries=null; }
+  if(!noCache && !cachedSummaries && !spanIsFull) { try { cachedSummaries=await loadAnalysisCache(fs, storage, fullFingerprint, expected); } catch (_) { cachedSummaries=null; } }
   async function removeClipVolumeBeforeAnalysis() {
     const backups=[];
     for (const clip of music) {

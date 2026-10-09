@@ -1,6 +1,6 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const cp = require('../plugin/custom-presets.js');
-const BUILT_IN = ['Promo/Action', 'Interview', 'Camcorder', 'Natural (MossFormer)'];
+const BUILT_IN = ['Promo/Action', 'Interview', 'Camcorder', 'Natural (MossFormer)', 'Stem separation'];
 
 test('a new preset name is trimmed and inner whitespace collapsed', () => {
   assert.equal(cp.validateNewName('   Podcast    Voice  ', BUILT_IN), 'Podcast Voice');
@@ -40,5 +40,14 @@ test('generated ids are custom-prefixed, distinct, and never collide with built-
   const a = cp.makePresetId(1790000000000, 0.1), b = cp.makePresetId(1790000000000, 0.2);
   assert.ok(cp.isCustomPresetId(a) && cp.isCustomPresetId(b));
   assert.notEqual(a, b);
-  for (const id of ['promo', 'interview', 'camcorder', 'natural']) assert.equal(cp.isCustomPresetId(id), false);
+  for (const id of ['promo', 'interview', 'camcorder', 'natural', 'stems']) assert.equal(cp.isCustomPresetId(id), false);
+});
+
+test('the Stem separation preset turns on both stems and keeps everything else at factory defaults', () => {
+  const main = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'plugin', 'main.js'), 'utf8');
+  assert.match(main, /\{id:'stems',label:'Stem separation',defaults:\{ambienceStem:true,musicStem:true\}\}/);
+  const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'plugin', 'index.html'), 'utf8');
+  assert.match(html, /<option value="stems">Stem separation<\/option>/);
+  assert.equal(cp.validateNewName('Stem Separation 2', BUILT_IN), 'Stem Separation 2');
+  assert.throws(() => cp.validateNewName('stem separation', BUILT_IN), /already exists/);
 });

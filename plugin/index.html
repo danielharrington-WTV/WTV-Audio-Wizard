@@ -1,7 +1,7 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"></head>
 <body>
-<div class="heading"><span id="headingConnected" class="heading-connected" title="Connected to the service. Panel menu &gt; Connection settings shows the connection row."></span><select id="presetSelect" title="Project-type preset. Each preset keeps its own settings; switch any time." aria-label="Project preset"><option value="promo">Promo/Action</option><option value="interview">Interview</option><option value="camcorder">Camcorder</option><option value="natural">Natural (MossFormer)</option></select><span class="subtle">v0.8.2</span></div>
+<div class="heading"><span id="headingConnected" class="heading-connected" title="Connected to the service. Panel menu &gt; Connection settings shows the connection row."></span><select id="presetSelect" title="Project-type preset. Each preset keeps its own settings; switch any time." aria-label="Project preset"><option value="promo">Promo/Action</option><option value="interview">Interview</option><option value="camcorder">Camcorder</option><option value="natural">Natural (MossFormer)</option><option value="stems">Stem separation</option></select><span class="subtle">v0.8.2</span></div>
 <div class="tab-bar" role="tablist" aria-label="Panel sections">
 <div id="tabMainBtn" role="tab" class="tab active" aria-selected="true" aria-controls="tabMain" title="Workflow steps">Main</div>
 <div id="tabOptionsBtn" role="tab" class="tab" aria-selected="false" aria-controls="tabOptions" title="Settings and preferences">Options</div>
@@ -18,7 +18,7 @@
 </div>
 <div id="connectionSection" class="section-content">
 <label class="field-row"><span>Service</span><input id="baseUrl" value="http://127.0.0.1:8756" aria-label="Local service URL"></label>
-<label class="field-row"><span>Token</span><input id="token" type="password" placeholder="From service window"></label>
+<label class="field-row"><span>Token</span><input id="token" type="text" spellcheck="false" placeholder="From service window"></label>
 <div id="connect" role="button" title="Connect to the local WTVAudioWizard service">Connect</div>
 </div></div>
 <div class="section">
@@ -69,14 +69,16 @@
 <label title="Edit the active sequence directly instead of a clone."><input id="processInPlace" type="checkbox" checked> Process in place</label>
 </div>
 </div>
-<label title="Per clip only. Process extra source audio for later trims and crossfades; visible cuts stay in place. Unavailable handles are reported."><input id="handlesEnabled" type="checkbox"> Add clip handles</label>
-<label class="field-row"><span>Seconds per side</span><input id="handleSeconds" type="number" value="0.5" min="0.01" max="2" step="0.1" disabled title="Requested handles on each side, limited by available source media and timeline zero."></label>
+<label title="Per clip only. Process extra source audio for later trims and crossfades; visible cuts stay in place. Unavailable handles are reported."><input id="handlesEnabled" type="checkbox" checked> Add clip handles</label>
+<label class="field-row"><span>Seconds per side</span><input id="handleSeconds" type="number" value="0.5" min="0.01" max="2" step="0.1" title="Requested handles on each side, limited by available source media and timeline zero."></label>
+<label class="field-row" title="Blend this much of the original clip back under the cleaned voice, to keep some of the raw mix (energy, room, effects). 0 = model output only. Needs Neural cleanup."><span>Keep raw mix · %</span><input id="rawBlend" type="number" value="0" min="0" max="50" step="5"></label>
 <p id="modeHelp" class="subtle">Select dialogue on separate tracks; leave music unselected.</p>
 </div>
 <div id="toggleLevelsStems" role="button" class="section-toggle nested options-toggle" aria-controls="levelsStemsSection" aria-expanded="false" title="Show or hide stem level targets">+ Levels &amp; stems</div>
 <div id="levelsStemsSection" style="display:none">
 <p id="settingsSource" class="subtle">Factory defaults</p>
 <label class="field-row"><span id="dialogueLabel">Dialogue · dBFS</span><input id="dialogue" type="number" value="-12" min="-70" max="-6"></label>
+<label class="field-row" title="Most Level &amp; compress may raise quiet dialogue. Higher helps distant or quiet talkers; it also raises their background."><span>Max level boost · dB</span><input id="maxBoost" type="number" value="8" min="0" max="24"></label>
 <label class="field-row"><span id="effectsLabel">Ambience · dBFS</span><input id="effects" type="number" value="-18" min="-70" max="-6"></label>
 <p id="levelHelp" class="subtle"></p>
 <p class="subtle">Extraction creates new stems. Bandit runs only for checked stems.</p>

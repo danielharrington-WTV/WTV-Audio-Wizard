@@ -24,7 +24,7 @@ test('Connect still expects service 0.7.1, independent of the panel version', ()
 
 test('settings saved by an older panel version still load', () => {
   const {validate, capture} = require('../plugin/settings-file.js');
-  const saved = capture(id => ({checked: true, value: ({mode: 'per_clip', enhancer: 'gap_urgenet', handleSeconds: '0.5', dialogue: '-24', music: '-28', effects: '-30', duck: '10', speechThreshold: '-40', attack: '100', release: '500', loudnessTarget: '-24', loudnessTolerance: '1', peakFlag: '-6', peakMerge: '2', qualityThreshold: '1.5'})[id]}));
+  const saved = capture(id => ({checked: true, value: ({mode: 'per_clip', enhancer: 'gap_urgenet', handleSeconds: '0.5', dialogue: '-24', music: '-28', effects: '-30', duck: '10', speechThreshold: '-40', attack: '100', release: '500', loudnessTarget: '-24', loudnessTolerance: '1', peakFlag: '-6', peakMerge: '2', qualityThreshold: '1.5', rawBlend: '0', maxBoost: '8'})[id]}));
   assert.equal(saved.plugin_version, version);
   assert.doesNotThrow(() => validate({...saved, plugin_version: '0.8.1'}));
   assert.doesNotThrow(() => validate({...saved, plugin_version: undefined}));

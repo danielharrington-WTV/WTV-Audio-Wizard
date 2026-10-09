@@ -28,8 +28,10 @@ import time
 import urllib.request
 
 PROJECT = Path(__file__).resolve().parents[1]
-# Environments and models live in <workspace>/work; WTV_WORKSPACE overrides the default.
-WORKSPACE = Path(os.environ.get('WTV_WORKSPACE') or PROJECT.parents[1])
+sys.path.insert(0, str(PROJECT))
+from service.workspace import find_workspace  # noqa: E402  (standard library only)
+# Environments and models live in <workspace>/work (see service/workspace.py).
+WORKSPACE = find_workspace(PROJECT)
 ENV = WORKSPACE / 'work' / 'sidon-env'
 MODELS = WORKSPACE / 'work' / 'sidon-models'
 CONFIG = Path(os.environ.get('WTV_CONFIG', PROJECT / 'local-config.json'))

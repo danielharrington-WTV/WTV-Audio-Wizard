@@ -15,8 +15,19 @@ let settingsLoadedFromFile = false;
 // Save as new preset) are listed after them, see custom-presets.js.
 // `defaults` overrides defaults.json for that preset's factory settings
 // (what "Reset" restores and what "Changed from defaults" compares against).
-const PRESETS = [{id:'promo',label:'Promo/Action'},{id:'interview',label:'Interview'},{id:'camcorder',label:'Camcorder'},
-  {id:'natural',label:'Natural (MossFormer)',defaults:{enhancer:'mossformer2'}}];
+// Tuned 2026-10-09 (Dan): the three were identical before. Handles are on for every preset (factory default).
+//  Promo/Action: 15% of the raw clip kept under the cleaned voice, hotter dialogue, stronger and faster music ducking.
+//  Interview:    fully clean, smoother ducking, lower speech floor so quiet answers still count as speech.
+//  Camcorder:    10% raw, De-click, more boost for distant talkers, lowest speech floor.
+const PRESETS = [
+  {id:'promo',label:'Promo/Action',defaults:{rawBlend:15,dialogue:-10,duck:12,attack:100,release:800}},
+  {id:'interview',label:'Interview',defaults:{attack:250,release:1500,speechThreshold:-45}},
+  {id:'camcorder',label:'Camcorder',defaults:{rawBlend:10,deessDeclick:true,maxBoost:12,speechThreshold:-48}},
+  {id:'natural',label:'Natural (MossFormer)',defaults:{enhancer:'mossformer2'}},
+  // Stem separation (2026-10-08): dialogue plus separate music and ambience /
+  // sound-effects tracks. Dialogue still comes from neural cleanup of the raw
+  // clip; Bandit v2 supplies the music and ambience stems.
+  {id:'stems',label:'Stem separation',defaults:{ambienceStem:true,musicStem:true}}];
 const DEFAULT_PRESET = 'camcorder';
 const ACTIVE_PRESET_KEY = 'wtv-active-preset-v1';
 let activePreset = DEFAULT_PRESET;
@@ -47,7 +58,7 @@ const restoreSpeech = require('./restore-speech.js');
 const perClip = require('./per-clip.js');
 const {processBatch, saveManifest, validateOutputs} = require('./clip-batch.js');
 const {createPrefetch} = require('./prefetch.js');
-const {waitForStableWav, waitForStableWavFile} = require('./wav.js');
+const {waitForStableWav, waitForStableWavFile, wavSilence} = require('./wav.js');
 const {computeButtonState, isResumableBatchContext} = require('./button-state.js');
 const $ = id => document.getElementById(id);
 // All clickable actions in this panel are `<div role="button">`, not real
@@ -261,6 +272,7 @@ function diagnosticReport() {
     `Dialogue: ${$('enableEnhancer').checked ? $('enhancer').value : 'raw (no model)'} \u00b7 level ${$('dialoguePostprocess').checked ? 'on' : 'off'} \u00b7 de-ess ${$('deess').checked ? 'on' : 'off'}`,
     `De-click: ${$('deessDeclick').checked}`,
     `Handles: ${$('handlesEnabled').checked ? $('handleSeconds').value + ' s per side (per clip only)' : 'off'}`,
+    `Preset: ${presetLabel(activePreset)} \u00b7 Keep raw mix ${$('rawBlend').value}% \u00b7 Max level boost ${$('maxBoost').value} dB \u00b7 Don't use cached files ${noCache ? 'on' : 'off'}`,
     `Handle results: ${JSON.stringify(context?.clips?.filter(c=>c.handles).map(c=>({clip:c.name,...c.handles})) || [])}`,
     `Optional stems: ambience=${$('ambienceStem').checked}, music=${$('musicStem').checked}`,
     `Job: ${jobId || 'none'}`, `Applied: ${Boolean(context && context.applied)}`,
@@ -305,7 +317,25 @@ $('copyReport').addEventListener('click', async () => {
 });
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+// "Don't use cached files" (panel menu, global, 2026-10-09): every run exports,
+// analyses and processes again. Jobs carry fresh:true so the service neither
+// reuses an earlier job nor its stage cache (it still stores the new results).
+const NO_CACHE_KEY = 'wtv-no-cache-v1';
+let noCache = false;
+try { noCache = localStorage.getItem(NO_CACHE_KEY) === '1'; } catch (_) {}
+function setNoCache(on) {
+  noCache = Boolean(on);
+  try { localStorage.setItem(NO_CACHE_KEY, noCache ? '1' : '0'); } catch (_) {}
+  say(noCache ? "Don't use cached files is on: every run exports and processes again." : "Don't use cached files is off: earlier exports and results are reused when they match.");
+}
+let serviceCapabilities = [];
+function freshJobBody(options) {
+  if (!noCache || options.method !== 'POST' || typeof options.body !== 'string') return options;
+  if (!serviceCapabilities.includes('fresh_jobs_v1')) throw new Error("Restart the updated service to use Don't use cached files.");
+  return {...options, body: JSON.stringify({...JSON.parse(options.body), fresh: true})};
+}
 async function request(path, options = {}) {
+  if (path === '/v1/jobs') options = freshJobBody(options);
   return requestLocal(clientBase, clientToken, path, options);
 }
 // Batch Process Dialogue's Processing menu (Main tab): the step checkboxes, in the
@@ -316,7 +346,7 @@ function processingStepsSelected() {
 }
 function processingSummaryText() {
   const parts = [];
-  if ($('enableEnhancer').checked) parts.push($('enhancer').value === 'mossformer2' ? 'MossFormer2' : 'GAP-URGENet');
+  if ($('enableEnhancer').checked) parts.push(($('enhancer').value === 'mossformer2' ? 'MossFormer2' : 'GAP-URGENet') + (Number($('rawBlend').value) > 0 ? ` + ${Number($('rawBlend').value)}% raw` : ''));
   if ($('dialoguePostprocess').checked) parts.push('Level');
   if ($('deess').checked) parts.push('De-ess');
   if ($('deessDeclick').checked) parts.push('De-click');
@@ -329,6 +359,8 @@ function syncCleanupControls() {
   $('handleSeconds').disabled = $('mode').value !== 'per_clip' || !$('handlesEnabled').checked;
   for (const id of [...PROCESSING_STEP_IDS, 'autoMute']) $(id).disabled = busy;
   $('enhancer').disabled = busy || !$('enableEnhancer').checked;
+  $('rawBlend').disabled = busy || !$('enableEnhancer').checked;
+  $('maxBoost').disabled = busy || !$('dialoguePostprocess').checked;
   $('processingSummary').textContent = processingSummaryText();
   $('processingWarning').style.display = processingStepsSelected() ? 'none' : 'block';
   $('repairHelp').style.display = $('deessDeclick').checked ? 'block' : 'none';
@@ -340,8 +372,15 @@ function settings() {
   if ($('enableEnhancer').checked && !availableModels.some(m => m.id === result.enhancer && m.available)) {
     throw new Error('Selected dialogue model is unavailable. Check its runtime and reconnect.');
   }
-  // Always full model output (no partial wet/dry blend).
-  if('enhancer_wet' in factory) result.enhancer_wet=1;
+  // Keep raw mix: the service blends this share of the raw clip back in before leveling
+  // (Settings.enhancer_wet = model share). Only meaningful with a model.
+  const rawShare = $('enableEnhancer').checked ? Number($('rawBlend').value) / 100 : 0;
+  if (!Number.isFinite(rawShare) || rawShare < 0 || rawShare > 0.5) throw new Error('Keep raw mix must be 0 to 50 %.');
+  if ('enhancer_wet' in factory) result.enhancer_wet = Math.round((1 - rawShare) * 1000) / 1000;
+  else if (rawShare > 0) throw new Error('Restart the updated service to use Keep raw mix.');
+  const boost = Number($('maxBoost').value);
+  if (!Number.isFinite(boost) || boost < 0 || boost > 24) throw new Error('Max level boost must be 0 to 24 dB.');
+  if ('max_boost_db' in factory) result.max_boost_db = boost;
   result.dialogue_postprocess = $('dialoguePostprocess').checked;
   if ('deess' in factory) result.deess = $('deess').checked;
   else if ($('deess').checked !== result.dialogue_postprocess) throw new Error('Restart the updated service to switch Level and De-ess separately.');
@@ -408,13 +447,13 @@ function showSettings(s) {
 // this is only used to compute the "Changed from defaults" diagnostic list,
 // so a mismatch here just makes that list wrong, not the actual reset.
 const FACTORY_DEFAULT_VALUES = {
-  mode:'per_clip', enhancer:'gap_urgenet', handlesEnabled:false, handleSeconds:0.5, selectedDialogue:true, processInPlace:true,
+  mode:'per_clip', enhancer:'gap_urgenet', handlesEnabled:true, handleSeconds:0.5, rawBlend:0, maxBoost:8, selectedDialogue:true, processInPlace:true,
   enableEnhancer:true, dialoguePostprocess:true, deess:true, autoMute:true, deessDeclick:false, ambienceStem:false, musicStem:false, duckEffects:false,
   stripMusicVolume:true, compressMusicBed:true, dialogue:-12, music:-28, effects:-18, duck:10, speechThreshold:-40,
   attack:200, release:1200, loudnessTarget:-24, loudnessTolerance:1, peakFlag:-6, peakMerge:2, peakMarkers:true, qualityThreshold:1.5,
 };
 const CHANGED_SETTINGS_LABELS = {
-  mode:'Source mode', enhancer:'Dialogue model', handlesEnabled:'Add clip handles', handleSeconds:'Handle length (s)',
+  mode:'Source mode', enhancer:'Dialogue model', handlesEnabled:'Add clip handles', handleSeconds:'Handle length (s)', rawBlend:'Keep raw mix (%)', maxBoost:'Max level boost (dB)',
   selectedDialogue:'Use selected clip only', processInPlace:'Process in place', enableEnhancer:'Neural dialogue cleanup',
   dialoguePostprocess:'Level & compress', deess:'De-ess', autoMute:'Mute raw when done', deessDeclick:'De-click', ambienceStem:'Extract ambience stem',
   musicStem:'Extract music stem', duckEffects:'Also duck ambience', stripMusicVolume:'Remove clip Volume before ducking',
@@ -536,6 +575,8 @@ const panelMenuState = panelMenu.createMenu({
     click: id => $(id).click(),
     getCompact: () => document.body.classList.contains('compact'),
     setCompact,
+    getNoCache: () => noCache,
+    setNoCache,
     // Shows the Connection block (hidden in compact layout while connected) and
     // opens it; choosing it again puts it away.
     toggleConnection: () => {
@@ -650,6 +691,27 @@ function loadPreset(id) {
   }
   resetActivePresetToDefaults();
 }
+// Preset defaults revision 2 (2026-10-09): Promo/Action, Interview and Camcorder
+// were retuned and clip handles turned on for every preset. Once per panel: the
+// three retuned presets drop their last-used settings so they start from the new
+// defaults; every other saved preset keeps its settings but gets handles on at 0.5 s.
+const PRESET_DEFAULTS_REVISION_KEY = 'wtv-preset-defaults-revision';
+const RETUNED_PRESETS = ['promo', 'interview', 'camcorder'];
+function migratePresetDefaults(store = localStorage) {
+  let revision = 0;
+  try { revision = Number(store.getItem(PRESET_DEFAULTS_REVISION_KEY)) || 0; } catch (_) { return; }
+  if (revision >= 2) return;
+  for (const preset of allPresets()) {
+    const key = presetSettingsKey(preset.id);
+    try {
+      if (RETUNED_PRESETS.includes(preset.id)) { store.removeItem(key); continue; }
+      const data = JSON.parse(store.getItem(key) || 'null');
+      if (data && data.values) { data.values.handlesEnabled = true; data.values.handleSeconds = 0.5; store.setItem(key, JSON.stringify(data)); }
+    } catch (_) { /* Leave unreadable saved settings to loadPreset's fallback. */ }
+  }
+  try { store.setItem(PRESET_DEFAULTS_REVISION_KEY, '2'); } catch (_) {}
+}
+migratePresetDefaults();
 renderPresetOptions();
 try { loadPreset(localStorage.getItem(ACTIVE_PRESET_KEY) || DEFAULT_PRESET); }
 catch (_) { loadPreset(DEFAULT_PRESET); }
@@ -658,7 +720,7 @@ for(const id of settingsFile.fieldIds) $(id).addEventListener('change',rememberS
 $('mode').addEventListener('change', () => { context = null; jobId = null; jobResult = null; $('musicPass').disabled = true; updateWorkflow(); updateActions(); });
 $('processInPlace').addEventListener('change', updateWorkflow);
 $('handlesEnabled').addEventListener('change', syncCleanupControls);
-for (const name of ['dialogue', 'music', 'effects', 'duck', 'attack', 'release', 'speechThreshold', 'duckEffects', 'enhancer', 'enableEnhancer', 'dialoguePostprocess', 'deess', 'ambienceStem', 'musicStem', 'deessDeclick']) {
+for (const name of ['dialogue', 'music', 'effects', 'duck', 'attack', 'release', 'speechThreshold', 'duckEffects', 'enhancer', 'enableEnhancer', 'dialoguePostprocess', 'deess', 'ambienceStem', 'musicStem', 'deessDeclick', 'rawBlend', 'maxBoost']) {
   $(name).addEventListener('change', () => {
     syncCleanupControls();
     $('settingsSource').textContent = 'Custom settings';
@@ -775,6 +837,7 @@ action('connect', async () => {
   const health = await (await request('/v1/health')).json();
   if (health.service_version !== '0.7.1') throw new Error('Restart the updated v0.7.1 local service.');
   availableModels = health.models;
+  serviceCapabilities = Array.isArray(health.capabilities) ? health.capabilities : [];
   factory = await (await request('/v1/defaults')).json();
   await uxp.storage.secureStorage.setItem('wtv-token', clientToken);
   setConnectionOpen(false);
@@ -1018,6 +1081,7 @@ async function exportPerClipBatch(context, preset) {
   context.lastAssertMs = 0;
   context.deferRenderSignature = true;
   let reusedExports = 0;
+  const silentClips = [];
   const progress = beginBatchProgress('Exporting', context.clips, context.clips.map((c,i)=>c.exportVerified ? i : -1).filter(i=>i>=0));
   try {
   for (const clip of pending) {
@@ -1029,9 +1093,14 @@ async function exportPerClipBatch(context, preset) {
     // same rate/channels/export length). Nothing else about the clip can
     // change without changing that id.
     const previous = context.reuse?.clips?.[clip.id];
-    const canReuse = !clip.handles || previous?.export_identity === clip.exportIdentity;
-    const existing = canReuse && await existingWav(context.folder, `${clip.id}-input.wav`,
-      {rate: context.rate, channels: context.channels, duration: clip.exportDuration ?? clip.duration});
+    const canReuse = !noCache && (!clip.handles || previous?.export_identity === clip.exportIdentity);
+    const expectedLayout = {rate: context.rate, channels: context.channels, duration: clip.exportDuration ?? clip.duration};
+    let existing = canReuse && await existingWav(context.folder, `${clip.id}-input.wav`, expectedLayout);
+    // A silent leftover (e.g. exported while its track was muted) is never reused.
+    if (existing && await silentExport(existing.nativePath, expectedLayout)) {
+      say(`Export ${index + 1}/${context.clips.length} \u00b7 ${clip.name} \u00b7 earlier export is silent; exporting again`);
+      existing = null;
+    }
     if (existing) {
       clip.inputFile = existing; clip.exportVerified = true; reusedExports++;
       batchPrefetch?.exported(context, clip);
@@ -1050,6 +1119,15 @@ async function exportPerClipBatch(context, preset) {
             {check, sleep, pollIntervalMs: 200});
         }});
       noteExportWait(renderWait);
+      // Digital silence: don't keep it and don't send it to the service.
+      if (await silentExport(clip.inputFile.nativePath, expectedLayout)) {
+        try { await clip.inputFile.delete(); } catch (_) { /* Overwritten on the next export. */ }
+        clip.inputFile = null;
+        silentClips.push(clip);
+        say(`Export ${index + 1}/${context.clips.length} \u00b7 ${clip.name} \u00b7 ${clipLocation(clip)} is silent; not kept and not sent to the service`);
+        progress.event({clipIndex:index,done:true});
+        continue;
+      }
     } catch (err) {
       // Identify exactly which timeline occurrence stalled -- the same
       // source file (e.g. "C0036.MP4") can appear dozens of times in a
@@ -1059,8 +1137,17 @@ async function exportPerClipBatch(context, preset) {
       throw err;
     }
     clip.exportVerified = true;
+    // New audio: an earlier processed result for this clip id must not be reused (clip-batch.js).
+    clip.freshExport = true;
     batchPrefetch?.exported(context, clip);
     progress.event({clipIndex:index,done:true});
+  }
+  if (silentClips.length) {
+    const names = silentClips.map(c => `${c.name} (${clipLocation(c)})`).join(', ');
+    const one = silentClips.length === 1;
+    throw new Error(`Silent export${one ? '' : 's'}: ${names}. ${one ? 'It was' : 'They were'} not kept and nothing was sent to the service. `
+      + 'Check that the track is not muted, the clip is enabled, its volume is not -\u221e and it has no "WTV muted" Amplify (select it and use Unmute), '
+      + 'then click Batch Process Dialogue again. The other exports are kept and reused.');
   }
   } finally {
     progress.stop();
@@ -1068,6 +1155,12 @@ async function exportPerClipBatch(context, preset) {
     context.reusedExports = reusedExports;
     try { await perClip.sealRender(context); } catch (_) { /* Clean's assertExportsUnchanged will report an unsealed render. */ }
   }
+}
+// True only when the WAV is digital silence (wav.js wavSilence). A file the check
+// cannot read is treated as sound, so the check never blocks a working batch.
+async function silentExport(nativePath, expected) {
+  try { return (await wavSilence(nativePath, expected, {check: checkCancelled})).silent; }
+  catch (error) { if (cancelled) throw error; return false; }
 }
 // An existing, complete WAV in the export folder that matches `expected`, or null.
 async function existingWav(folder, name, expected) {
@@ -1139,7 +1232,8 @@ async function doPrepare() {
       const h = clip.handles;
       say(`${clip.name}: handles ${h.head.toFixed(3)} s before / ${h.tail.toFixed(3)} s after${h.reason ? ' - '+h.reason : ''}.`);
     }
-    context.reuse = await loadPreviousManifest(target.folder);
+    context.reuse = noCache ? null : await loadPreviousManifest(target.folder);
+    if (noCache) say("Don't use cached files is on: exporting and processing every clip again.");
     const preset = await getWavPreset(fs, context);
     await saveManifest(context, 'exporting');
     await exportPerClipBatch(context, preset);
@@ -1162,6 +1256,10 @@ async function doPrepare() {
         {binary: uxp.storage.formats.binary, check, sleep, pollIntervalMs: 200});
     }});
   noteExportWait(renderWait);
+  if (await silentExport(target.file.nativePath, {rate: context.rate, channels: context.channels, duration: context.duration})) {
+    try { await target.file.delete(); } catch (_) {}
+    throw new Error('The sequence export is silent, so it was not kept. Check for muted tracks, disabled clips or volume at -\u221e, then click Batch Process Dialogue again.');
+  }
   say(`Export ready. Choose that WAV when asked. ${context.inPlace ? 'Keep the sequence unchanged.' : 'Keep the clone unchanged.'}`);
 }
 async function doProcess() {
@@ -1339,7 +1437,7 @@ action('musicPass', async () => {
   let lastMusicProgressStage = '';
   try {
   const result = await musicPass.run(musicContext, chosen,
-    {fs,binary:uxp.storage.formats.binary,check:()=>{if(cancelled) throw Error('Music ducking cancelled. Any export already started may still finish.');},say,sleep,storage:localStorage,
+    {fs,binary:uxp.storage.formats.binary,check:()=>{if(cancelled) throw Error('Music ducking cancelled. Any export already started may still finish.');},say,sleep,storage:localStorage,noCache,
     dialogueReference:dialogueSelector.current(),onReference:reference=>{lastMusicReport={...lastMusicReport,reference};},onPlan:plan=>{
       const {points,...analysis}=plan;
       lastMusicReport={...lastMusicReport,settings:chosen,applied:false,analysis,curve_points:points.length};

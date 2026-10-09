@@ -83,6 +83,9 @@ class Track(Strict):
 class JobRequest(Strict):
     stage_mode: Literal["complete", "dialogue_cache"] = "complete"
     require_dialogue_cache: bool = False
+    # Panel "Don't use cached files": run again instead of reusing an earlier job or
+    # stage-cache entry. Results are still stored. Not part of the job fingerprint.
+    fresh: bool = False
     tracks: list[Track] = Field(min_length=1, max_length=3)
     settings: Settings = Field(default_factory=Settings)
 

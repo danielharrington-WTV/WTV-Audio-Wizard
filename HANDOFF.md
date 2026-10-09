@@ -1,5 +1,158 @@
 # WTVAudioWizard continuation handoff — v0.8.2
 
+## Latest — Token field plain text again (2026-10-09)
+
+The preset/no-cache save (same day) was built from an older working copy of `plugin/index.html` and put the Token field back to `type="password"`, undoing the earlier change. Restored `type="text" spellcheck="false"`. Nothing else in that file regressed (checked line by line: the other differences are the new Keep raw mix and Max level boost fields and the handles checkbox). New test in `tests/panel-help.test.cjs` locks the plain-text token in.
+
+## Latest — Presets retuned, handles on by default, Don't use cached files (2026-10-09)
+
+Dan: the silent export came from a muted whole track or a soloed other track. Note for the record: the panel does read track mute (`AudioTrack.isMuted()`, per-clip.js `inventory`) and unmutes the target track in its render copy; it skips muted tracks when Selected clips only is off. Solo is not read; it is not known whether the UXP API exposes it. Either way the silence check (entry below) now stops such exports.
+
+Dan asked for: handles on by default for all presets at 0.5 s; Promo/Action, Interview and Camcorder tuned apart (they had identical defaults); Promo/Action keeping about 15% of the raw mix; a global "don't use cached files" setting. His choices (from the options offered): Promo "15% raw, punchy", Interview "fully clean, smooth", Camcorder "rescue distant voices", no-cache as a panel-menu tick.
+
+Panel (still 0.8.2):
+- `PRESETS` defaults (field ids): Promo/Action `{rawBlend:15, dialogue:-10, duck:12, attack:100, release:800}`; Interview `{attack:250, release:1500, speechThreshold:-45}`; Camcorder `{rawBlend:10, deessDeclick:true, maxBoost:12, speechThreshold:-48}`. Natural and Stem separation unchanged. `FACTORY_DEFAULT_VALUES.handlesEnabled` is now true (0.5 s); the checkbox starts checked.
+- New portable per-preset fields (settings-file.js; older files default to 0 and 8): `rawBlend` "Keep raw mix · %" (0-50, Options > Clean dialogue; disabled without Neural cleanup) -> service `enhancer_wet = 1 - rawBlend/100` (the service already blended the raw clip back in before leveling; the panel used to force 1); `maxBoost` "Max level boost · dB" (0-24, Options > Levels & stems; disabled without Level & compress) -> `max_boost_db` (already a service setting, default 8). Shown in Changed from defaults, the Batch Process Options summary ("GAP-URGENet + 15% raw") and the Copy report.
+- One-time migration (`wtv-preset-defaults-revision` = 2): drops the saved last-used settings of promo/interview/camcorder so they load the new defaults, and sets handles on at 0.5 s in every other saved preset (built-in and custom). Dan's own tweaks to those three presets are therefore replaced once.
+- "Don't use cached files": panel-menu tick (`noCache`, localStorage `wtv-no-cache-v1`, global, off by default); the menu's safety-rule comment notes it as a menu-only exception, as Dan chose. When on: no export reuse, no `clip-batch.json` result reuse, music analysis cache not read (`music-pass.js` `noCache`, still written), and every `POST /v1/jobs` (batch, prefetch, full sequence, Extract ambience, Rebuild Speech) gets `fresh: true` through `request()`. Without the service capability the run stops with "Restart the updated service".
+
+Service (still 0.7.1; restart needed): `JobRequest.fresh` (default false, not in the job fingerprint) skips de-duplication and stage-cache reads (except a final job that requires the dialogue pass its stage job just made); `StageCache.put(..., replace=True)` swaps in the new entry; capability `fresh_jobs_v1`; storage cleanup also removes `stage-cache/*.old-*` leftovers.
+
+Docs: guide (preset tuning, handles on, Keep raw mix, Max level boost, menu item), README current state, service README.
+
+Tests: JS 408/408 (new `tests/preset-tuning.test.cjs`: handles on, the three presets distinct and valid, migration, fresh job bodies, setting mapping; settings-file, panel-menu and version tests updated). Service 178 pass, 6 skip (new: `test_service.py` fresh job not reused and capability advertised; `test_storage_cleanup.py` schema and cache replace), same 2 known music failures.
+
+Not checked in Premiere or by ear. Risk to listen for: GAP-URGENet rebuilds the voice through a vocoder, so blending 15% raw under it may sound phasey or doubled; MossFormer2 (mask-based) should blend cleanly. If Promo sounds phasey, try Natural with 15% raw for comparison.
+
+## Latest — Silent exports are not kept or sent to the service (2026-10-09)
+
+Dan ran Batch Process Dialogue with a track muted by mistake; the results were silent, and reruns stayed silent after unmuting. Cause: the clip's export (`<clip id>-input.wav`) was digital silence, and reuse only checks length and format, so the silent export (and the processed result made from it) was reused on every run. How the mute got into the first export is not known: per-clip export unmutes an explicitly selected clip's track in the render, so it may have been a clip-level mute, a "WTV muted" Amplify, a submix or Full sequence mode. A Copy report from such a run would tell.
+
+Dan asked: check every new export for silence; if digital silence (peak below about -90 dBFS), don't keep it and don't send it to the service. Built (panel only, still 0.8.2; service unchanged):
+- `plugin/wav.js`: `wavSilence(nativePath, expected, {io, check, thresholdDb=-90})` reads the WAV in 1 MB blocks through music-wav.js's bounded `header`/`exact`/`sample` (PCM 8/16/24/32, float 32/64) and stops at the first sample above the threshold, so normal audio costs one block. `SILENCE_DBFS = -90`.
+- `plugin/main.js` `exportPerClipBatch`: after each export verifies, `silentExport()` checks it; a silent one is deleted, not marked exported, not handed to the interleaved prefetch (so never uploaded), and logged ("... is silent; not kept and not sent to the service"). The other clips carry on; at the end the batch stops with an error naming every silent clip and what to check (track mute, clip enabled, volume at -inf, "WTV muted" Amplify via Unmute). Clicking again resumes and exports only those clips. Also: an existing export in the folder that is silent is exported again instead of reused (this fixes Dan's current project without deleting files); each fresh export sets `clip.freshExport`. Full sequence mode deletes a silent export and stops with a message. `silentExport()` treats an unreadable file as sound (only a cancel propagates), so the check cannot block a batch that worked before.
+- `plugin/clip-batch.js`: a clip with `freshExport` never reuses an older processed result from `clip-batch.json` (previously, without handles, results were reused by clip id and settings alone, so a re-export would still have picked up the silent result).
+- Tests: new `tests/silence.test.cjs` (5: zero files in 16/24-bit PCM and 32-bit float, -95 dBFS silent vs -60 dBFS room tone, early stop and late-only sound, cancel, source checks of the three call sites); `clip-batch.test.cjs` +1 (fresh export skips result reuse). JS tests 401/401.
+- Not checked in Premiere. To test: mute a dialogue track, run on a selected clip from it, expect the silent-clip message; unmute and click again, expect a fresh export and a real result.
+
+## Latest — Service storage cleanup built: 14 days local, 7 on the shared machine (2026-10-09)
+
+Dan chose 14 days on his PC and 7 on the shared machine; no size cap. Built as planned in the entry below, with one firm rule from Dan: the panel's result files are never deleted. They live in the project export folder, which the service never sees; nothing in the cleanup takes a path from the panel.
+
+Service (`WTVAudioWizard-Service`, still version 0.7.1, no API change; restart the service to use it):
+- New `service/storage_cleanup.py` (standard library). "Last used" = file modification time. Removes, when unused for `retention_days`: finished/failed/cancelled job records (`job-<id>.json`) with their folders; uploads (`<id>.wav` + `.json`) that no remaining job references; `stage-cache/<key>` entries. Crash leftovers older than a day: `*.tmp`, job folders with no record, uploads with no description, `stage-cache/*.tmp-*` and `*.invalid-*`. Never: queued/running jobs and their uploads, pinned uploads, `token.txt`, `model-speed.json`, anything not named like the service's own files. `retention_days: 0` keeps everything.
+- `service/app.py`: `RETENTION_DAYS` from `local-config.json` (`retention_days`, default 14; an invalid value prints a warning and uses 14). `clean_storage()` runs under `LOCK` at startup (after jobs are loaded) and hourly on a daemon thread, skipped while any job or quality scan is queued or running; removed jobs are dropped from `JOBS`/`CANCEL`. Prints one line ("Cleanup (keeping 14 days): N jobs, N uploads, N cache entries, N leftovers, freed X GB"); errors never stop the service. Last-used refreshed on: job reuse by de-duplication, result download, upload download, upload referenced by a new job; `stage_cache.py` refreshes an entry's folder time on a hit.
+- Report only: `python -m service.storage_cleanup` (service Python, from the service folder; `--days N`, `--data DIR`). Deletes nothing.
+- `scripts/setup_linux.py`: `write_config` adds `retention_days: 7` (`SHARED_RETENTION_DAYS`) unless already set. Dan's Windows `local-config.json` is unchanged and so uses 14.
+- `local-config.example.json` documents `retention_days`; service README has a Storage cleanup paragraph.
+- Tests: new `tests/test_storage_cleanup.py` (9: old vs recent jobs and uploads, running/queued/busy/pinned kept, 0 days, leftovers incl. a non-service folder left alone, stage cache, touch, setting validation, report-only command, cleanup at service start forgetting removed jobs). `test_setup_linux.py` expects the 7. Service suite: 176 pass, 6 skip, the same 2 known music failures.
+
+Panel (still 0.8.2): `extract-ambience.js` (used by Extract ambience and Rebuild Speech) now deletes its upload only if the job was never submitted, which removes the 409 on `DELETE /v1/assets/{id}`. The DELETE after a de-duplicated (reused) job stays, since that upload is unused and the delete succeeds. `extract-ambience.test.cjs` and `restore-speech.test.cjs` now expect the upload to remain. JS tests 395/395.
+
+README: "Current state" updated (cleanup, Premiere checks done, service path now inside this folder, old copies removed, `..\WTVAudioWizard-Service` references corrected).
+
+To use: restart the service. The first start prints a cleanup line (nothing to remove yet, since `wtv-data` was recreated). Not yet run on Dan's PC or on Linux.
+
+## Latest — Premiere checks confirmed; folder check; service storage cleanup planned (2026-10-09)
+
+Dan confirmed in Premiere (2026-10-09) that everything listed as unverified works: plain-text token field; panel menu and compact layout (first use of `entrypoints.setup`); interleaved batch (export not slowed, Cancel during export, time saved); v0.8.2 heading, Batch Process Dialogue / Batch Process Options labels, Stem separation preset; export folder per project, kept-files subfolder, Full sequence without prompts, folder choice surviving a restart; the 2026-10-02 list (Rebuild Speech end to end, Processing menu, Mute raw when done, hidden captions, smooth progress); Unmute, Select muted and the -96 dB raw Amplify. Button names stay as they are (the 2026-10-01 naming suggestions are closed).
+
+Folder check (2026-10-09):
+- `outputs\work\wtv-data` is gone; `outputs\work` holds only `service-env`. That was the ACTIVE data folder (jobs since 2026-10-07 and the pairing token). The service recreates it on its next start with a new token, which has to be pasted into the panel once; previous results are no longer reused. If the service was running when it was deleted, restart it.
+- `files-pasted-by-the-user-wtvaudiowizard\work\wtv-data` (used up to 2026-10-06, unused since) is still there: at least 1.5 GB and over 2,000 entries. Safe to delete.
+- The old `service`, `runners` and `scripts` copies are gone from `WTVAudioWizard` and `outputs`. `SAM-Test` is gone; the three SAM lines in `.gitignore` can now be removed.
+- Still present, optional to remove: `outputs\WTVAudioWizard v0.8.1.zip` (104 MB, old package).
+
+Plan (built the same day, see the entry above): age-based cleanup of the service data folder (replaces the open 409 item):
+- What is in the data folder: uploads (`<asset>.wav` + `.json`), job records (`job-<id>.json`) with a folder per job (`<id>\result\*.wav` and intermediates), `stage-cache\` (dialogue cache stage), analysis results, `model-speed.json`, `token.txt`.
+- Each job and upload gets a "last used" time: set when created, and refreshed whenever a job is reused by de-duplication, a result is downloaded, or an upload is referenced by a new job. Stage-cache entries use their folder time, refreshed on a hit.
+- Cleanup runs once at service start and then hourly while no job is running. With `retention_days` = N (in `local-config.json`; proposed default 14; 0 = never delete):
+  1. finished/failed/cancelled jobs not used for N days: delete the record and its folder;
+  2. uploads not used for N days and not referenced by any remaining job: delete `.wav` + `.json`;
+  3. stage-cache entries not used for N days;
+  4. leftovers older than one day: `.tmp` files and job folders with no record (from crashes).
+- Dan (2026-10-09): result files on the plugin side must never be deleted. They are not affected: the panel downloads each result (`GET /v1/jobs/{id}/result/{stem}`) and writes its own WAVs into the project export folder (`WTVAudioWizard` subfolder) that Premiere imports. The cleanup only touches the service's data folder (`work\wtv-data`, or the shared GPU machine's), never the export folder, and the service has no way to reach it. Keep it that way: no cleanup code may take a path from the panel.
+- Never deleted: queued or running jobs and their uploads, pinned uploads (being analysed), `token.txt`, `model-speed.json`, configuration.
+- Optional size cap `max_storage_gb`: if still over the cap after the age pass, remove the least recently used finished jobs and uploads until under it. More useful on the shared Linux machine (4 users, 7 days suggested there).
+- Visible result: one line in the service window per run ("Cleanup: 42 jobs, 120 uploads, 3.1 GB freed") and a `--dry-run` command that lists what would go. Optional later: storage size in Copy report and a "Clear service cache" panel-menu item.
+- Panel side: remove the pointless `DELETE /v1/assets/{id}` calls (`extract-ambience.js`, and `clip-batch.js` after a reused job) that cause the 409; cleanup makes them unnecessary. Rerunning something that was cleaned up simply processes again.
+- Tests: fake clock and temp data folder covering each rule, the never-delete list, the dry run, and a job submitted during cleanup.
+- Waiting on Dan: retention days, whether to add the size cap, and go-ahead to build.
+
+## Latest — Token shown in plain text in the connection menu (2026-10-09)
+
+Dan asked for the token not to be hidden: the Token field in the connection block (`plugin/index.html`, `#token`) is now `type="text"` (with `spellcheck="false"`) instead of `type="password"`, so it can be read and checked after pasting. No other change; the token is still stored and sent as before.
+
+## Latest — Service finds its workspace from the new location (2026-10-08)
+
+Dan moved `WTVAudioWizard-Service` inside `WTVAudioWizard` and asked for the defaults to work from there.
+
+Correction to the note in the SAM-Test entry below: the service was not broken by the move. `outputs\work` also holds a `service-env` (created 2026-09-09) and a `wtv-data`, and the old "two folders up" default from the new location lands exactly there. The service has been running from it since 2026-10-07: a new pairing token was created then, and that data folder holds 166 jobs up to today. The earlier data folder, `files-pasted-by-the-user-wtvaudiowizard\work\wtv-data`, is no longer used (its stage cache and token stay there, unused). Model environments in `local-config.json` are absolute paths and unaffected.
+
+Change (no change in behaviour on Dan's PC today; it now holds wherever the folder sits):
+- New `service/workspace.py` (standard library): `find_workspace(service_root, default_levels=2)` = `WTV_WORKSPACE` if set, else the nearest folder above the service folder that has `work/service-env` (Windows `Scripts\python.exe` or Linux `bin/python`), else `default_levels` up (2 = old Windows default, 1 = fresh Linux install).
+- Used by `service/app.py` (data folder), `scripts/setup_sidon.py`, `scripts/setup_linux.py` (default 1). `start-service.ps1`, `start-service.sh` and `scripts/validate-restore.bat` implement the same search, print "Workspace: ..." and pass `WTV_WORKSPACE` on so the service's data folder and token come from the same place.
+- On Dan's PC the nearest match is `outputs` (`outputs\work\service-env`), i.e. what is in use now; the token stays the same.
+- Tests: new `tests/test_workspace.py` (beside/inside/nearest-wins/explicit/fallbacks, and the Linux start script run for real). The PowerShell search was run under PowerShell 7.4 on Linux in three layouts (workspace two levels up, nearer workspace wins, none found = clear error). Service tests 167 pass, 6 skip, the same two music failures.
+
+## Latest — SAM Audio rejected; SAM-Test to be removed (2026-10-08)
+
+Verdict (Dan, after listening to run 20261008-150737): all SAM Audio variants count as failures. Bandit v2 separates dialogue, music and ambience just as well and much faster, so SAM Audio will not be integrated and there is no `separator` choice for it. The Stem separation preset stays as built (Bandit v2 for music and ambience, GAP-URGENet for dialogue).
+
+Why it lost, for the record: on the RTX 5080 the 109 s stereo promo took 50-81 s per variant (large peaked at 10.3 GiB allocated / 12.4 GiB reserved, which fills a 16 GB card in Task Manager); the quality variant with reranking did not fit; chained stems only add back to the mix to about -9 dB because SAM re-synthesises every stem; it needs gated Hugging Face access (Meta can withdraw it) and about 25 GB of model downloads; it would not fit comfortably on the planned RTX 3060 12 GB server. Do not revisit unless a much lighter release appears.
+
+Cleanup: Dan asked for everything SAM-related to be deleted. This session has no shell on Dan's PC and cannot delete files, so Dan deletes these himself:
+- `WTVAudioWizard\SAM-Test\` (code plus the multi-GB `.venv`). It was never committed to git (or, if it was, delete it from git too).
+- `Desktop\Sam test\SAM results\` (the source WAV can stay).
+- Hugging Face cache `C:\Users\Dan\.cache\huggingface\hub\`: `models--facebook--sam-audio-small`, `-base`, `-large`, `models--facebook--sam-audio-judge`, `models--facebook--pe-a-frame-large`, `models--lukewys--laion_clap`. Leave the other models there (MossFormer, DAC, Whisper and so on are used elsewhere; t5-base/roberta-base/bart-base/bert-base-uncased are small and may be shared, so keep them).
+- After `SAM-Test` is gone, the three SAM lines in `.gitignore` (comment plus `SAM-Test/.venv/` and `SAM-Test/SAM results/`) can be removed; keep them until the folder is deleted so the `.venv` cannot be committed by accident.
+The SAM-Test entries below are kept as history.
+
+## Latest — SAM-Test third run: four variants separated; quality variant made opt-in (2026-10-08)
+
+Run 20261008-150737 on the RTX 5080 (results in `Desktop\Sam test\SAM results\20261008-150737`, not yet listened to). Times are for the 109 s stereo promo (both channels processed), bfloat16, 25 s windows:
+
+| Variant | Time | Peak allocated / reserved | Sum error vs mix |
+|---|---|---|---|
+| small-chained | 53 s (incl. first-call warm-up) | 5.6 / 7.8 GiB | -9.1 dB |
+| base-chained | 50 s | 6.9 / 9.1 GiB | -8.8 dB |
+| large-chained | 81 s | 10.3 / 12.4 GiB | -9.9 dB |
+| large-parallel | 81 s | 10.3 / 12.4 GiB | exact (ambience = remainder) |
+
+Chained stems add back to the mix only to about -9 dB: SAM re-synthesises both the target and the residual through its codec, so nothing forces them to sum. Parallel's ambience is the remainder, so anything the model missed or smeared lands there.
+
+Dan saw the 16 GB card "completely saturated". Not a leak (one model at a time): large reserves 12.4 GiB plus the CUDA context, and the quality variant loaded 12.1 GiB of weights (reranker with judge and CLAP, span predictor) before any audio, then failed on its first call with `RuntimeError: expected scalar type Float but found BFloat16` (no traceback was kept). Changes: quality is opt-in (`--variants large-chained-quality`), uses 4 candidates (`--candidates`) and 10 s windows, and runs the reranker and span predictor in float32 with autocast off (`fp32_island`) while the main model stays bfloat16; failures now record the traceback; every load prints and reports weights per model part. The launcher now stops with a message only when the quality variant is asked for without judge access. The transformers "MISSING ... newly initialized" notice appeared while the quality parts loaded; check it if quality is ever pursued. For the RTX 3060 12 GB server: base fits; large needs `--window 15` or `10`. 11 kit tests pass. The quality path is untested on a GPU.
+
+## Latest — SAM-Test first run: loader fixed for huggingface_hub 1.x (2026-10-08)
+
+Dan signed in to Hugging Face himself (browser login) and ran the kit on the RTX 5080: the install worked, the 109 s stereo 48 kHz promo loaded, and every variant failed with `TypeError: BaseModel._from_pretrained() missing 2 required keyword-only arguments: 'proxies' and 'resume_download'`. Cause: the dependency set resolves huggingface_hub 1.x (1.33.0 with transformers 5.19.0), which no longer passes or accepts those two arguments; sam_audio's `BaseModel._from_pretrained` still requires them. Fix in `separate.py` only (`hub_compat()`, called before loading): replaces that loader with one doing the same steps (snapshot download, config.json, build, checkpoint.pt) using only arguments every hub version accepts; covers the judge model too. Tested in the sandbox against huggingface_hub 1.33.0 (reproduces the error unpatched, loads patched) and 0.36.0; 8 kit tests pass. No reinstall needed: the venv is kept, rerun `run_sam_test.bat`. The "No module named 'triton'" line from xformers and the pynvml deprecation notice are harmless on Windows. Second run (14:48): loader fix worked, but every variant then failed with `ValueError: torchcodec.__spec__ is None`. torchcodec 0.7.0 cannot load on Dan's PC (no FFmpeg 4-7 shared DLLs), so the kit's stand-in modules were used, and transformers 5.x probes `importlib.util.find_spec('torchcodec')`, which rejects a module without a spec. Fixed: the stand-ins now carry a proper module spec; also fixed the stand-in's own error message (it referenced a cleared exception variable). New test covers both; 9 kit tests pass. The kit never decodes through torchcodec (audio goes in as tensors), so FFmpeg is not needed.
+
+## Latest — SAM-Test kit built (2026-10-08)
+
+New folder `SAM-Test/` (code only; `.venv/` and `SAM results/` are git-ignored). Standalone: no plugin or service change.
+
+- `run_sam_test.bat` -> `setup_and_run.py` (stdlib): checks Git, GPU and driver (570+ -> cu128), creates `SAM-Test/.venv`, installs torch/torchvision/torchaudio 2.8.0/0.23.0/2.8.0 from the PyTorch CUDA index, then `sam_audio` pinned to commit `bb4c6999d2677c7402360e426afc01ddfad6dce0` with `--no-deps` and its listed dependencies under a constraints file so nothing replaces the CUDA PyTorch; torchcodec 0.7.0 optional. Hugging Face: if no token, runs `hf auth login` for Dan to paste his own token; then checks access to sam-audio-small/base/large (stops with instructions if missing) and sam-audio-judge (quality variant skipped without it). Default input `Desktop\Sam test\Moment_of_Truth_Season_10_Promo.wav`; drag another WAV onto the .bat.
+- `separate.py`: variants small-chained, base-chained, large-chained, large-parallel, large-chained-quality (span prediction + 8-candidate reranking). Chained = speech prompt on mix -> dialogue + rest, music prompt on rest -> music + ambience. Parallel = both prompts on the mix, ambience = mix - both. Default prompts "people speaking", "music". Model is mono 48 kHz: each channel separately (identical channels once), back to source rate/length. Files over 25 s in 25 s windows with 2 s crossfades, falling back to 15/10 s on out-of-memory. Per call, target+residual is cross-correlated with the input and any delay corrected. Results in `SAM results\<time>\<variant>\{dialogue,music,ambience}.wav` + report.json/report.txt + listening checklist; a failed variant is recorded and the rest continue.
+- Memory: after Dan pointed to sam-audio-infer 0.1.0 (MIT, OpenMIRLab; a wrapper around the official package, still needs it and the gated weights), the kit loads "lite": SAMAudioConfig is patched during loading so the image/text rerankers and span predictor are never built (avoids the ImageBind, judge and PE-audio downloads), `sam_audio_infer.lite.create_lite_model` removes the vision encoder (built without pretrained weights by default, filled from the checkpoint), weights in bfloat16 with autocast. sam-audio-infer reports large at ~6 GB lite/bf16 vs ~16 GB full. `--precision float32` and `--window 0` available.
+- Verified in the cloud sandbox (Linux, no GPU, no Hugging Face): the full dependency set installs with torch 2.8.0; `sam_audio`, `sam_audio_infer.lite` and the torchcodec fallback import; API signatures match what the kit calls; the config override works and restores itself; 8 tests of the audio handling with a stand-in model pass. NOT verified: Windows install (xformers, torchcodec), the model download, any real separation, memory use, quality.
+- Dan pasted his Hugging Face token into the chat on 2026-10-08. Claude did not use or store it. Advised Dan to enter it himself at the prompt and to revoke and replace it on huggingface.co since it is now in the chat history.
+- Also noted at the time: the service folder had moved inside `WTVAudioWizard`, with a warning that the service would no longer start. That warning was wrong; see the workspace entry above.
+
+## Latest — Stem separation preset; SAM Audio test planned (2026-10-08)
+
+Preset (done):
+- New built-in preset **Stem separation** (`id:'stems'`) at the end of `PRESETS` in `main.js`, also in the static `<select>` in `index.html`. Defaults: factory settings plus `ambienceStem:true, musicStem:true`. Like the other built-ins it remembers its own edits and Reset returns to these defaults.
+- What it produces, per clip: Clean dialogue (GAP-URGENet cleanup of the raw clip, then level and de-ess as usual), Music (Bandit v2 music head) and Ambience (Bandit v2 sfx head). Note: the dialogue stem is not Bandit's speech head; the service has never used that head. Defaults also level the stems (music -28, ambience -18 dBFS) and duck the music stem under dialogue; not changed for this preset, to be revisited if Dan wants untouched stems.
+- `tests/custom-presets.test.cjs` covers it. JS tests 395/395. Guide (Preset callout) and README updated.
+
+SAM Audio test (planned, nothing built, Dan asked for a plan):
+- Model: Meta SAM Audio (`facebookresearch/sam-audio`; checkpoints `facebook/sam-audio-small|base|large`, plus `-tv` variants). Text-prompted: each call returns `target` (the described sound) and `residual` (everything else). Needs Python 3.11+, a CUDA GPU, and gated Hugging Face access (request on the model page, then `hf auth login` on the 5080 PC). Licence "SAM License" (2025-11-19): royalty-free, no explicit commercial restriction found, prohibited end uses, recipients of the model must get the licence; review before shipping it to the office. Memory, model sizes, sample rate and maximum length are not documented; the test measures them.
+- Source: `C:\Users\Dan\Desktop\Sam test\Moment_of_Truth_Season_10_Promo.wav` (outside the connected folders; Claude needs folder access to read results).
+- Wanted: three tracks, dialogue, music, ambience/sound effects.
+- Variants: (A) chained: "speech" prompt on the mix -> dialogue + residual; "music" prompt on that residual -> music; final residual = ambience. Three stems that sum back to the mix. (B) parallel: "speech" and "music" prompts each on the original mix; ambience = mix minus both. (C) baselines from what WTV already has: Bandit v2 speech/music/sfx heads in one pass, and the Stem separation preset's GAP-URGENet dialogue. Each SAM variant at small and large, with default settings and with `predict_spans=True, reranking_candidates=8`. Prompt wording tried as part of the test (e.g. "speech" vs "a man speaking").
+- Measured per run: time, peak VRAM, sample length and lag against the source, how far the three stems sum from the original, loudness per stem. Dan judges by ear: words in the music/ambience stems, music or effects left in dialogue, artefacts, and whether the promo's hits and risers end up in music or effects.
+- Deliverable: a standalone test folder (like GPU-Test) with its own Python environment, a one-click launcher, results as `<variant>/dialogue.wav, music.wav, ambience.wav` plus `report.json`, and a listening checklist. Integration into the service (a `separator` choice beside `bandit_v2`) only if SAM wins.
+
 ## Latest — Interleaved batch: jobs start during export (2026-10-07)
 
 Dan: "change the way batch processing works so it exports then sends to the connected service, interleaving for faster processing." Panel only; the service is unchanged and needs no restart. Still panel 0.8.2.

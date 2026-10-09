@@ -30,3 +30,8 @@ test('every kept file goes through the WTVAudioWizard output folder; Full sequen
  const prepare=main.slice(main.indexOf('async function doPrepare()'),main.indexOf('async function doApply()'));
  assert.match(prepare,/await resolveOutputFolder\(context\)/);assert.doesNotMatch(prepare,/resolveWorkFolder\(/);
 });
+
+test('the service token is shown as plain text, not dots (Dan, 2026-10-09)',()=>{
+ const html=require('node:fs').readFileSync(require.resolve('../plugin/index.html'),'utf8');
+ assert.match(html,/<input id="token" type="text" spellcheck="false"/);assert.doesNotMatch(html,/id="token" type="password"/);
+});
