@@ -46,3 +46,10 @@ def test_pinned_lists_are_complete_and_the_config_matches_the_service(tmp_path, 
     written = json.loads((tmp_path / 'local-config.json').read_text())
     assert set(written) == {'sidon', 'mossformer2', 'retention_days'} and written['retention_days'] == 7
     assert len(list(tmp_path.glob('local-config.json.bak-*'))) == 1
+
+
+def test_bandit_weights_come_from_the_pinned_hugging_face_mirror():
+    # Zenodo timed out from the office (2026-10-09); jsoncx/bandit-v2 has the same file (same size and SHA-256).
+    assert setup.BANDIT_URL == f'https://huggingface.co/jsoncx/bandit-v2/resolve/{setup.BANDIT_REVISION}/checkpoint-multi.ckpt'
+    assert len(setup.BANDIT_REVISION) == 40 and 'zenodo' not in setup.BANDIT_URL
+    assert setup.BANDIT_FILE[1:] == (446680129, 'abcfccf65446752a057f4a302c941479a54b7560ebf8d7bca039d2ea98e64cfc')

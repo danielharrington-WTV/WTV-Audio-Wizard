@@ -1,5 +1,13 @@
 # WTVAudioWizard continuation handoff — v0.8.2
 
+## Latest — Debian installer: Bandit v2 weights from Hugging Face instead of Zenodo (2026-10-09)
+
+Dan's check from the office PC: `curl.exe -I -L --max-time 20 "https://zenodo.org/records/12701995/files/checkpoint-multi.ckpt?download=1"` timed out with 0 bytes. He pointed to https://huggingface.co/jsoncx/bandit-v2.
+
+Verified through the Hugging Face API (2026-10-09): the repo is public and not gated, has one file `checkpoint-multi.ckpt`, 446,680,129 bytes, LFS SHA-256 `abcfccf6...8e64cfc` — exactly the size and hash already pinned in `BANDIT_FILE` (the Windows PC's checkpoint), so it is the same file. No licence is stated on that mirror (the original Bandit v2 release carries its own terms). Head commit `fde0ff714b879259f3f436a0eb9046626f82a880` (last modified 2026-06-24).
+
+Change (`scripts/setup_linux.py`): `BANDIT_REVISION` = that commit; `BANDIT_URL = https://huggingface.co/jsoncx/bandit-v2/resolve/<revision>/checkpoint-multi.ckpt`. The download is still checked against the pinned SHA-256; `--from-dir` still accepts `bandit-v2-multi.ckpt` or `checkpoint-multi.ckpt`. Zenodo is no longer used. Service README's network list updated (PyPI, download.pytorch.org, GitHub, huggingface.co). New test in `tests/test_setup_linux.py` (10 pass); `--plan --only bandit_v2` shows the new URL. Not yet downloaded on the Debian machine.
+
 ## Latest — Token field plain text again (2026-10-09)
 
 The preset/no-cache save (same day) was built from an older working copy of `plugin/index.html` and put the Token field back to `type="password"`, undoing the earlier change. Restored `type="text" spellcheck="false"`. Nothing else in that file regressed (checked line by line: the other differences are the new Keep raw mix and Max level boost fields and the handles checkbox). New test in `tests/panel-help.test.cjs` locks the plain-text token in.

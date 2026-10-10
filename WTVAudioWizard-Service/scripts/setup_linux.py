@@ -54,7 +54,11 @@ GAP_FILES = {
     'PostNet.pt': (19170170, 'd401c7572451341d1482bf35a1bc2c590b9fe8c21d17f0b4b1268e0d88d1c066'),
     'config.json': (33, 'faba0c6f14ef6066eebf93568c4914e70d03ab66fc9c969b796aed5067bc8371'),
 }
-BANDIT_URL = 'https://zenodo.org/records/12701995/files/checkpoint-multi.ckpt?download=1'
+# Hugging Face mirror (jsoncx/bandit-v2, public, not gated), pinned to a commit. Same file as the
+# Zenodo record 12701995 (identical size and SHA-256, the LFS id), which timed out from the office
+# on 2026-10-09. The hash below is still checked, so a different file is never used.
+BANDIT_REVISION = 'fde0ff714b879259f3f436a0eb9046626f82a880'
+BANDIT_URL = f'https://huggingface.co/jsoncx/bandit-v2/resolve/{BANDIT_REVISION}/checkpoint-multi.ckpt'
 BANDIT_FILE = ('bandit-v2-multi.ckpt', 446680129, 'abcfccf65446752a057f4a302c941479a54b7560ebf8d7bca039d2ea98e64cfc')
 BANDIT_ALIASES = ('bandit-v2-multi.ckpt', 'checkpoint-multi.ckpt')
 MOSS_URL = 'https://huggingface.co/alibabasglab/MossFormer2_SE_48K/resolve/eff8c97925c8bec812af707814b3e5d777fd4503/last_best_checkpoint.pt'

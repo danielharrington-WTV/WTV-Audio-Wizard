@@ -44,7 +44,7 @@ To create the service environment: make a Python 3.12 virtual environment at `<w
 4. `bash setup-linux.sh`
 5. `bash start-service.sh`
 
-`setup-linux.sh` creates four Python environments under `<workspace>/work`, clones GAP-URGENet and Bandit v2 at the commits the Windows PC uses, downloads the weights, checks every weight file against its pinned SHA-256 and writes `local-config.json`. It needs internet access to PyPI, download.pytorch.org, GitHub, huggingface.co and zenodo.org, and roughly 30 GB of free disk space. It can be run again; finished steps are skipped.
+`setup-linux.sh` creates four Python environments under `<workspace>/work`, clones GAP-URGENet and Bandit v2 at the commits the Windows PC uses, downloads the weights, checks every weight file against its pinned SHA-256 and writes `local-config.json`. It needs internet access to PyPI, download.pytorch.org, GitHub and huggingface.co (the Bandit v2 weights come from the jsoncx/bandit-v2 mirror there, pinned and hash-checked; Zenodo is no longer used), and roughly 30 GB of free disk space. It can be run again; finished steps are skipped.
 
 - `bash setup-linux.sh --plan` prints every step without changing anything.
 - `--only service sidon` installs just those parts (`service`, `gap_urgenet`, `bandit_v2`, `mossformer2`, `sidon`).
