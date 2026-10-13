@@ -63,7 +63,7 @@ test('rejects changed final URL if host ignores redirect option', async () => {
 test('explains an old token-only service and an old loopback-only service', async () => {
   await assert.rejects(requestLocal('http://localhost:8756', '/v1/health', {}, async () => ({ok: false, status: 401, text: async () => 'Unauthorized'})), /old pairing token.*restart/);
   await assert.rejects(requestLocal('http://192.168.0.176:8756', '/v1/health', {}, async () => ({ok: false, status: 403, text: async () => '{"detail":"Local client required"}'})), /refused this connection/);
-  await assert.rejects(requestLocal('http://localhost:8756', '/v1/health', {}, async () => {throw Error('Manifest entry not found.');}), /v0\.8\.3/);
+  await assert.rejects(requestLocal('http://localhost:8756', '/v1/health', {}, async () => {throw Error('Manifest entry not found.');}), /v0\.8\.4/);
 });
 
 test('quality jobs use allowlisted routes only, with no Authorization header',async()=>{

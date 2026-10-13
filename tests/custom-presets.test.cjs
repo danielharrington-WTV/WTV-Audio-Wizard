@@ -51,3 +51,17 @@ test('the Stem separation preset turns on both stems and keeps everything else a
   assert.equal(cp.validateNewName('Stem Separation 2', BUILT_IN), 'Stem Separation 2');
   assert.throws(() => cp.validateNewName('stem separation', BUILT_IN), /already exists/);
 });
+
+test('the preset dropdown ends with "+ New preset…", which opens the form without switching presets (2026-10-13)', () => {
+  const main = require('node:fs').readFileSync(require.resolve('../plugin/main.js'), 'utf8');
+  const render = main.slice(main.indexOf('function renderPresetOptions()'), main.indexOf('function showNewPresetForm()'));
+  assert.match(render, /create\.value = NEW_PRESET_OPTION; create\.textContent = '\+ New preset\\u2026'/);
+  assert.ok(render.indexOf('allPresets()') < render.indexOf('NEW_PRESET_OPTION'), 'listed after every preset');
+  const show = main.slice(main.indexOf('function showNewPresetForm()'), main.indexOf('function showNewPresetForm()') + 600);
+  assert.match(show, /\$\('presetSelect'\)\.value = activePreset/);
+  assert.match(show, /setActiveTab\('options'\)/);
+  assert.match(show, /setPresetsOpen\(true\)/);
+  assert.match(show, /\$\('newPresetName'\)\.focus\(\)/);
+  assert.match(main, /if \(\$\('presetSelect'\)\.value === NEW_PRESET_OPTION\) showNewPresetForm\(\);\n  else loadPreset/);
+  assert.match(main, /\$\('newPresetName'\)\.addEventListener\('keydown', event => \{ if \(event\.key === 'Enter'\) \$\('createPreset'\)\.click\(\); \}\)/);
+});

@@ -53,6 +53,7 @@ const {createDialogueSelector} = require('./dialogue-selector.js');
 const deplosive = require('./deplosive.js');
 // const lowend = require('./lowend.js'); // Enhance low end hidden in v0.8.1
 const muteTools = require('./mute-tools.js');
+const musicSelect = require('./music-select.js');
 const extractAmbience = require('./extract-ambience.js');
 const restoreSpeech = require('./restore-speech.js');
 const perClip = require('./per-clip.js');
@@ -104,7 +105,7 @@ function makeButtonDiv(el) {
 for (const id of ['toggleConnection', 'connect', 'runCleanDialogue', 'musicPass', 'fixPop',
   'checkQuality', 'toggleQuality', 'verifyLoudness', 'saveSettings', 'loadSettings', 'refreshDialogueTracks', 'tabMainBtn', 'tabOptionsBtn', 'reset', 'resetAllOptions', 'copyReport', 'cancel',
   'createPreset', 'deletePreset',
-  'extractAmbience', 'restoreSpeech', 'unmuteClips', 'selectMuted',
+  'extractAmbience', 'restoreSpeech', 'unmuteClips', 'selectMuted', 'selectMusic',
   'toggleProcessing', 'toggleCleanDialogue', 'toggleLevelsStems', 'toggleDucking', 'toggleLoudness', 'toggleChangedSettings', 'togglePresets', 'openDestinationFolder', 'changeFolder']) makeButtonDiv($(id));
 let musicContextRevision=0;
 let context, musicContext, activeAction, jobId, jobResult, busy = false, factory, availableModels = [];
@@ -129,6 +130,7 @@ let lastAmbienceReport = null;
 let lastRestoreReport = null;
 let lastUnmuteReport = null;
 let lastSelectMutedReport = null;
+let lastSelectMusicReport = null;
 let lastCleanDialogueTiming = null;
 // Project export folder, resolved once per panel session and shared by
 // Prepare exports, Fix a pop, and Enhance low end.
@@ -269,7 +271,7 @@ function reportError(error, actionName) {
   say(lastError.message);
 }
 function diagnosticReport() {
-  const report = ['WTVAudioWizard panel v0.8.3', `Panel menu: ${panelMenuState.installed ? 'installed' : 'not installed (' + panelMenuState.error + ')'} \u00b7 compact ${document.body.classList.contains('compact') ? 'on' : 'off'}`, `Mode: ${$('mode').value}`,
+  const report = ['WTVAudioWizard panel v0.8.4', `Panel menu: ${panelMenuState.installed ? 'installed' : 'not installed (' + panelMenuState.error + ')'} \u00b7 compact ${document.body.classList.contains('compact') ? 'on' : 'off'}`, `Mode: ${$('mode').value}`,
     `Dialogue: ${$('enableEnhancer').checked ? $('enhancer').value : 'raw (no model)'} \u00b7 level ${$('dialoguePostprocess').checked ? 'on' : 'off'} \u00b7 de-ess ${$('deess').checked ? 'on' : 'off'}`,
     `De-click: ${$('deessDeclick').checked}`,
     `Handles: ${$('handlesEnabled').checked ? $('handleSeconds').value + ' s per side (per clip only)' : 'off'}`,
@@ -294,6 +296,7 @@ function diagnosticReport() {
     lastRestoreReport ? `Rebuild Speech: ${JSON.stringify(lastRestoreReport)}` : '',
     lastUnmuteReport ? `Unmute: ${JSON.stringify(lastUnmuteReport)}` : '',
     lastSelectMutedReport ? `Select muted: ${JSON.stringify(lastSelectMutedReport)}` : '',
+    lastSelectMusicReport ? `Select music: ${JSON.stringify(lastSelectMusicReport)}` : '',
     lastCleanDialogueTiming ? `Clean dialogue timing: ${formatCleanDialogueTimingReport(lastCleanDialogueTiming)}` : '',
     lastCleanDialogueTiming?.service?.totals ? `Clean dialogue service phases: ${JSON.stringify(lastCleanDialogueTiming.service.totals)}` : '',
     lastError ? `Last error (${lastError.action}): ${lastError.message}\n${lastError.stack}` : '',
@@ -569,7 +572,7 @@ function setCompact(on) {
 }
 document.body.classList.toggle('compact', optionsUi.compact === true);
 const panelMenuState = panelMenu.createMenu({
-  entrypoints: uxp.entrypoints, panelId: 'wtvAudioWizard', version: '0.8.3',
+  entrypoints: uxp.entrypoints, panelId: 'wtvAudioWizard', version: '0.8.4',
   hooks: {
     click: id => $(id).click(),
     getCompact: () => document.body.classList.contains('compact'),
@@ -578,6 +581,7 @@ const panelMenuState = panelMenu.createMenu({
     setNoCache,
     // Shows the Connection block (hidden in compact layout while connected) and
     // opens it; choosing it again puts it away.
+    newPreset: () => showNewPresetForm(),
     toggleConnection: () => {
       const show = !document.body.classList.contains('show-connection');
       document.body.classList.toggle('show-connection', show);
@@ -658,7 +662,23 @@ function renderPresetOptions() {
     option.value = preset.id; option.textContent = preset.label;
     select.appendChild(option);
   }
+  // Last entry opens the "save as new preset" form (2026-10-13: presets were
+  // hard to find under Options). Choosing it never changes the active preset.
+  const create = document.createElement('option');
+  create.value = NEW_PRESET_OPTION; create.textContent = '+ New preset\u2026';
+  select.appendChild(create);
   select.value = activePreset;
+}
+const NEW_PRESET_OPTION = '__new_preset__';
+// Shows Options > Presets with the name field ready. Used by the preset
+// dropdown's "+ New preset…" entry and the panel menu.
+function showNewPresetForm() {
+  $('presetSelect').value = activePreset;
+  setActiveTab('options');
+  setPresetsOpen(true);
+  try { $('presetsSection').scrollIntoView({block: 'center'}); } catch (_) { /* Older UXP: the section is already open. */ }
+  try { $('newPresetName').focus(); } catch (_) {}
+  say(`Name the new preset and click Save as new preset. It starts from the current ${presetLabel(activePreset)} settings.`);
 }
 let deletePresetArmed = null;
 function updatePresetButtons() {
@@ -714,7 +734,10 @@ migratePresetDefaults();
 renderPresetOptions();
 try { loadPreset(localStorage.getItem(ACTIVE_PRESET_KEY) || DEFAULT_PRESET); }
 catch (_) { loadPreset(DEFAULT_PRESET); }
-$('presetSelect').addEventListener('change', () => loadPreset($('presetSelect').value));
+$('presetSelect').addEventListener('change', () => {
+  if ($('presetSelect').value === NEW_PRESET_OPTION) showNewPresetForm();
+  else loadPreset($('presetSelect').value);
+});
 for(const id of settingsFile.fieldIds) $(id).addEventListener('change',rememberSettings);
 $('mode').addEventListener('change', () => { context = null; jobId = null; jobResult = null; $('musicPass').disabled = true; updateWorkflow(); updateActions(); });
 $('processInPlace').addEventListener('change', updateWorkflow);
@@ -740,7 +763,7 @@ function action(id, fn) {
     dialogueSelector.setBusy(true);
     $('mode').disabled = true; $('cancel').disabled = false;
     for (const id of [...PROCESSING_STEP_IDS, 'enhancer', 'autoMute']) $(id).disabled = true;
-    for (const name of ['changeFolder', 'connect', 'runCleanDialogue', 'musicPass', 'fixPop', 'reset', 'extractAmbience', 'restoreSpeech', 'unmuteClips', 'selectMuted', 'saveSettings', 'loadSettings', 'verifyLoudness', 'checkQuality', 'createPreset', 'deletePreset']) $(name).disabled = true;
+    for (const name of ['changeFolder', 'connect', 'runCleanDialogue', 'musicPass', 'fixPop', 'reset', 'extractAmbience', 'restoreSpeech', 'unmuteClips', 'selectMuted', 'selectMusic', 'saveSettings', 'loadSettings', 'verifyLoudness', 'checkQuality', 'createPreset', 'deletePreset']) $(name).disabled = true;
     try { await fn(); } catch (error) { reportError(error, id); }
     finally {
       if (id === 'process' || id === 'musicPass' || id === 'runCleanDialogue' || id === 'verifyLoudness' || id === 'checkQuality') {
@@ -821,6 +844,7 @@ function updateActions() {
   $('restoreSpeech').disabled = state.restoreSpeech;
   $('unmuteClips').disabled = state.unmuteClips;
   $('selectMuted').disabled = state.selectMuted;
+  $('selectMusic').disabled = busy; // Works offline, on any sequence.
   $('cancel').disabled = state.cancel;
   $('mainHint').textContent = state.hint;
   updateScrollIndicators();
@@ -947,6 +971,7 @@ action('createPreset', async () => {
   $('newPresetName').value = '';
   say(`Created preset "${name}" from the current settings. It's selected now; edits are remembered on it.`);
 });
+$('newPresetName').addEventListener('keydown', event => { if (event.key === 'Enter') $('createPreset').click(); });
 // Custom presets only. No confirm() in UXP, so the first click arms the
 // button ("Click again to delete") for 4 s and the second click deletes.
 action('deletePreset', async () => {
@@ -1524,6 +1549,20 @@ action('unmuteClips', async () => {
   const result = await muteTools.unmute({say});
   lastUnmuteReport = result;
   say(`Unmuted ${result.clips} clip${result.clips === 1 ? '' : 's'}: ${result.names.join(', ')}. Undo reverts it.`);
+});
+// Select music (2026-10-13): the filter is one panel-wide setting (not per
+// preset), remembered as typed; an empty field goes back to the default.
+$('musicSelectFilter').value = musicSelect.loadFilter(localStorage);
+$('musicSelectFilter').addEventListener('change', () => {
+  const field = $('musicSelectFilter');
+  if (!musicSelect.parseFilter(field.value).length) field.value = musicSelect.DEFAULT_MUSIC_FILTER;
+  try { localStorage.setItem(musicSelect.MUSIC_FILTER_KEY, field.value); } catch (_) { /* Remembering is optional. */ }
+});
+action('selectMusic', async () => {
+  const terms = musicSelect.parseFilter($('musicSelectFilter').value);
+  const result = await muteTools.selectMusic({terms, say});
+  lastSelectMusicReport = {clips: result.clips, tracks: result.tracks, filter: terms};
+  say(`Selected ${result.clips} music clip${result.clips === 1 ? '' : 's'} (${musicSelect.describeFilter(terms)}) on track${result.tracks.length === 1 ? '' : 's'} A${result.tracks.join(', A')}. Ready for Level & duck music.`);
 });
 action('selectMuted', async () => {
   const result = await muteTools.selectMuted({say});

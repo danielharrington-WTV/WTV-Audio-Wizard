@@ -21,7 +21,7 @@ function validate(data, operation='load') {
 function capture(get) {
  const values={};
  for(const [id,rule] of Object.entries(fields)) values[id]=rule==='boolean'?get(id).checked:typeof rule[0]==='number'?Number(String(get(id).value ?? '').trim() || NaN):get(id).value;
- const data={format:'WTVAudioWizard settings',schema:1,plugin_version:'0.8.3',values};
+ const data={format:'WTVAudioWizard settings',schema:1,plugin_version:'0.8.4',values};
  validate(data,'save');return data;
 }
 function apply(get,values) {

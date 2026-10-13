@@ -125,6 +125,10 @@ select { height:30px; min-height:30px; width:100%; min-width:0; margin-top:3px; 
 .step-row { display:flex; align-items:stretch; }
 .step-row > [role="button"] { flex:1 1 0; width:auto; }
 .step-row > [role="button"]:not(:last-child) { margin-right:6px; }
+/* Select music (2026-10-13): small icon-only button left of Level & duck music. */
+.step-row > .icon-button { flex:0 0 28px; padding-left:0; padding-right:0; display:flex; align-items:center; justify-content:center; }
+.icon-arrow { width:16px; height:16px; }
+.icon-button.is-disabled .icon-arrow { opacity:.45; }
 /* Step 4 shares a row with Fix a pop; ducking controls live on the Options
    tab under the Ducking section. Per-button help used to live in "?"
    popover toggles beside each button; replaced by a plain title="" tooltip

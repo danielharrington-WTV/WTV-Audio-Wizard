@@ -24,6 +24,6 @@ test('reset respects Natural preset model while resetting every other field',()=
 });
 test('all editable panel preferences have reset coverage except deliberate context fields',()=>{
  const html=fs.readFileSync(require.resolve('../plugin/index.html'),'utf8');
- const excluded=['presetSelect','baseUrl','newPresetName','duckAgainst'];
+ const excluded=['presetSelect','baseUrl','newPresetName','duckAgainst','musicSelectFilter'];
  for(const match of html.matchAll(/<(?:input|select)\b[^>]*\bid="([^"]+)"/g))assert.ok(settings.fieldIds.includes(match[1])||excluded.includes(match[1]),`Missing reset coverage: ${match[1]}`);
 });

@@ -34,7 +34,7 @@ test('every kept file goes through the WTVAudioWizard output folder; Full sequen
 test('the token field is gone; the Service URL takes this computer or a LAN server (Dan, 2026-10-12)',()=>{
  const html=require('node:fs').readFileSync(require.resolve('../plugin/index.html'),'utf8');
  assert.doesNotMatch(html,/id="token"/);assert.doesNotMatch(html,/>Token</);
- assert.match(html,/<input id="baseUrl" value="http:\/\/127\.0\.0\.1:8756"/);assert.match(html,/192\.168\.0\.176:8756/);
+ assert.match(html,/<input id="baseUrl" value="http:\/\/192\.168\.0\.176:8756"/,'office GPU server is the default (Dan, 2026-10-13)');assert.match(html,/127\.0\.0\.1:8756/);
 });
 test('the panel remembers the connected service URL and sends no pairing token',()=>{
  const main=require('node:fs').readFileSync(require.resolve('../plugin/main.js'),'utf8');

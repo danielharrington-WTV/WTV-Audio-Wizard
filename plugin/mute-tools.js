@@ -16,6 +16,7 @@ const ppro = require('premierepro');
 const host = require('./premiere.js');
 const {inventory} = require('./per-clip.js');
 const {amplifyGainParamIndexes} = require('./amplify-params.js');
+const {matchesMusic, describeFilter} = require('./music-select.js');
 
 // Mirrors per-clip.js's own constants -- kept separate rather than exported
 // from there to avoid widening that file's module surface for two read-only
@@ -130,18 +131,41 @@ async function selectMuted({say = () => {}} = {}) {
   const muted = [];
   for (const entry of all) if (await isMuted(entry)) muted.push(entry);
   if (!muted.length) throw new Error('No clips muted by WTVAudioWizard were found on this sequence.');
+  setTimelineSelection(sequence, muted);
+  return {clips: muted.length, names: muted.map(e => e.name)};
+}
+
+// Replaces the timeline selection with `entries` (inventory() entries). See
+// the comment above selectMuted for why everything happens inside the callback.
+function setTimelineSelection(sequence, entries) {
   if (!ppro.TrackItemSelection?.createEmptySelection || typeof sequence.setSelection !== 'function') {
     throw new Error('This Premiere build cannot set the timeline selection.');
   }
   let built = false, applied = false, addFailures = 0;
   ppro.TrackItemSelection.createEmptySelection(sel => {
     built = true;
-    for (const entry of muted) { if (!sel.addItem(entry.item, false)) addFailures++; }
+    for (const entry of entries) { if (!sel.addItem(entry.item, false)) addFailures++; }
     applied = sequence.setSelection(sel);
   });
   if (!built) throw new Error('Premiere did not create a selection group.');
   if (!applied) throw new Error(`Premiere did not accept the new selection.${addFailures ? ` ${addFailures} clip(s) could not be added.` : ''}`);
-  return {clips: muted.length, names: muted.map(e => e.name)};
 }
 
-module.exports = {unmute, selectMuted, isMuted, findMuteAmplify, MUTE_SUFFIX};
+// Select music (2026-10-13): selects every audio clip on the active sequence
+// whose clip or track name contains one of `terms` (music-select.js), ready
+// for Level & duck music. Disabled clips are left out; muted tracks are not.
+async function selectMusic({terms, say = () => {}} = {}) {
+  if (!terms || !terms.length) throw new Error('Set the Select music filter in Options > Ducking first (for example ANW).');
+  const project = await ppro.Project.getActiveProject();
+  if (!project) throw new Error('Open a Premiere project first.');
+  const sequence = await project.getActiveSequence();
+  if (!sequence) throw new Error('Activate a sequence first.');
+  say('Looking for music clips...');
+  const all = await inventory(sequence);
+  const music = all.filter(entry => entry.enabled && matchesMusic(entry, terms));
+  if (!music.length) throw new Error(`No audio clips with ${describeFilter(terms)} in the clip or track name were found on this sequence. Change the filter in Options > Ducking.`);
+  setTimelineSelection(sequence, music);
+  return {clips: music.length, tracks: [...new Set(music.map(e => e.trackIndex + 1))], names: music.map(e => e.name), terms};
+}
+
+module.exports = {unmute, selectMuted, selectMusic, isMuted, findMuteAmplify, MUTE_SUFFIX};

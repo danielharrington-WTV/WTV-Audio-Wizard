@@ -29,7 +29,7 @@ test('the menu is registered for the manifest panel id with a no-op show handler
   const panel = h.config().panels.wtvAudioWizard;
   assert.equal(typeof panel.show, 'function');
   assert.equal(typeof panel.invokeMenu, 'function');
-  assert.deepEqual(panel.menuItems.filter(i => i !== '-').map(i => i.label), ['Copy report', 'Open export folder', 'Change export folder…', 'Connection settings', 'Save settings…', 'Load settings…', 'Compact panel', "Don't use cached files", 'WTVAudioWizard v9.9.9']);
+  assert.deepEqual(panel.menuItems.filter(i => i !== '-').map(i => i.label), ['Copy report', 'Open export folder', 'Change export folder…', 'Connection settings', 'Save settings…', 'Load settings…', 'New preset from current settings…', 'Compact panel', "Don't use cached files", 'WTVAudioWizard v9.9.9']);
   assert.equal(panel.menuItems.at(-1).enabled, false);
 });
 
@@ -90,4 +90,17 @@ test("Don't use cached files toggles through its hooks and ticks its own item", 
   menu.invoke('noCache'); assert.equal(state, true); assert.equal(items.noCache.checked, true);
   menu.invoke('noCache'); assert.deepEqual(calls, [true, false]); assert.equal(items.noCache.checked, false);
   assert.equal(menuItems({version: '1', noCache: true}).find(i => i.id === 'noCache').checked, true);
+});
+
+test('New preset from current settings goes to its own hook (2026-10-13)', () => {
+  const calls = [];
+  const menu = createMenu({entrypoints: {setup() {}, getPanel() { throw new Error('n/a'); }}, panelId: 'wtvAudioWizard', version: '1', hooks: {
+    click: id => calls.push(['click', id]), toggleConnection() {}, getCompact: () => false, setCompact() {}, newPreset: () => calls.push(['newPreset']),
+  }});
+  menu.invoke('newPreset');
+  assert.deepEqual(calls, [['newPreset']]);
+  // The same action exists in the panel itself (dropdown entry + Options > Presets), per the menu safety rule.
+  const main = read('main.js');
+  assert.match(main, /newPreset: \(\) => showNewPresetForm\(\)/);
+  assert.ok(read('index.html').includes('id="createPreset"'));
 });

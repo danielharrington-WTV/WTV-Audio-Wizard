@@ -1,7 +1,7 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"></head>
 <body>
-<div class="heading"><span id="headingConnected" class="heading-connected" title="Connected to the service. Panel menu &gt; Connection settings shows the connection row."></span><select id="presetSelect" title="Project-type preset. Each preset keeps its own settings; switch any time." aria-label="Project preset"><option value="promo">Promo/Action</option><option value="interview">Interview</option><option value="camcorder">Camcorder</option><option value="natural">Natural (MossFormer)</option><option value="stems">Stem separation</option></select><span class="subtle">v0.8.3</span></div>
+<div class="heading"><span id="headingConnected" class="heading-connected" title="Connected to the service. Panel menu &gt; Connection settings shows the connection row."></span><select id="presetSelect" title="Project-type preset. Each preset keeps its own settings; switch any time. Choose + New preset… to save the current settings as your own preset." aria-label="Project preset"><option value="promo">Promo/Action</option><option value="interview">Interview</option><option value="camcorder">Camcorder</option><option value="natural">Natural (MossFormer)</option><option value="stems">Stem separation</option></select><span class="subtle">v0.8.4</span></div>
 <div class="tab-bar" role="tablist" aria-label="Panel sections">
 <div id="tabMainBtn" role="tab" class="tab active" aria-selected="true" aria-controls="tabMain" title="Workflow steps">Main</div>
 <div id="tabOptionsBtn" role="tab" class="tab" aria-selected="false" aria-controls="tabOptions" title="Settings and preferences">Options</div>
@@ -17,7 +17,7 @@
 <span id="connectionStatus" class="connection-status" role="status" aria-live="polite"><span class="connection-dot"></span><span id="connectionStatusText">Not connected</span></span>
 </div>
 <div id="connectionSection" class="section-content">
-<label class="field-row" title="This computer: http://127.0.0.1:8756. GPU server on the local network: http://&lt;its LAN address&gt;:8756, for example http://192.168.0.176:8756. No token is needed."><span>Service</span><input id="baseUrl" value="http://127.0.0.1:8756" spellcheck="false" placeholder="http://192.168.0.176:8756" aria-label="Service URL (this computer or a LAN server)"></label>
+<label class="field-row" title="Default: the office GPU server, http://192.168.0.176:8756. For a service on this computer use http://127.0.0.1:8756. No token is needed."><span>Service</span><input id="baseUrl" value="http://192.168.0.176:8756" spellcheck="false" placeholder="http://192.168.0.176:8756" aria-label="Service URL (this computer or a LAN server)"></label>
 <div id="connect" role="button" title="Connect to the WTVAudioWizard service at the Service URL (this computer or a server on the local network)">Connect</div>
 </div></div>
 <div class="section">
@@ -37,6 +37,7 @@
 </div>
 <label class="auto-mute-row" title="On: Batch Process Dialogue mutes the raw clips or tracks it replaces, and Rebuild Speech mutes each original it rebuilds (Unmute reverts). Off: the raw audio stays audible so you can compare or mute it yourself."><input id="autoMute" type="checkbox" checked> Mute raw when done</label>
 <div class="step-row">
+<div id="selectMusic" role="button" class="step step4 icon-button" aria-label="Select music" title="Select music: selects every audio clip on this sequence whose clip or track name contains the Select music filter (Options &gt; Ducking; default ANW), ready for Level &amp; duck music."><img class="icon-arrow" src="icons/select-arrow.svg" alt=""></div>
 <div id="musicPass" role="button" class="step step4" aria-disabled="true" title="On the selected music: duck it under the dialogue (Amplify keyframes), then normalize its level (Broadcast multiband compressor at -12 dB output gain, then a 3:1 peak-control compressor above -30 dB; limiters bypassed; duck keyframes preserved). All native effects, editable in Effect Controls.">Level &amp; duck music</div>
 <div id="fixPop" role="button" class="step secondary" aria-disabled="true" title="Select one audio clip on the timeline, park the playhead on the pop inside it, then click Fix pop at playhead. Works on any clip, with or without Clean dialogue; Undo reverts it.">Fix pop at playhead</div>
 </div>
@@ -85,6 +86,7 @@
 </div>
 <div id="toggleDucking" role="button" class="section-toggle nested options-toggle" aria-controls="duckingSection" aria-expanded="false" title="Show or hide music ducking settings">+ Ducking</div>
 <div id="duckingSection" style="display:none">
+<label class="field-row" title="The arrow button beside Level &amp; duck music selects every audio clip whose clip or track name contains one of these words (comma-separated, not case-sensitive). Remembered for every preset."><span>Select music · name contains</span><input id="musicSelectFilter" type="text" spellcheck="false" maxlength="200" value="ANW" placeholder="ANW"></label>
 <div id="musicReference" style="display:none">
 <label class="field-row"><span>Duck against</span><select id="duckAgainst" disabled><option value="clean">Clean dialogue</option><option value="tracks">Choose tracks</option></select></label>
 <div id="dialogueTrackList" style="display:none" aria-label="Dialogue reference tracks"></div>

@@ -1,4 +1,6 @@
-# WTVAudioWizard — panel 0.8.3, service 0.7.2
+# WTVAudioWizard — panel 0.8.4, service 0.7.2
+
+**Panel 0.8.4 (2026-10-13):** the Service URL defaults to the office GPU server, `http://192.168.0.176:8756`, the preset menu ends with **+ New preset…** (also in the panel menu) to save the current settings as your own preset, and a small arrow button left of **Level & duck music** selects the music clips (clip or track name contains the words in Options > Ducking > Select music, default `ANW`). Service unchanged.
 
 ## Current state (2026-10-12)
 

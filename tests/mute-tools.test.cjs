@@ -46,8 +46,8 @@ function setup(specs) {
       getName: async () => name,
       createSetNameAction: newName => () => { name = newName; calls.push(`rename:${spec.name}->${newName}`); },
     };
-    return {item, trackIndex: 0, index, sourceId: `${spec.name}-src`, start: {ticks: String(index)}, end: {ticks: String(index + 1)},
-      duration: 1, get name() { return name; }, enabled: true, muted: false, transitions: 0};
+    return {item, trackIndex: spec.trackIndex ?? 0, index, sourceId: `${spec.name}-src`, start: {ticks: String(index)}, end: {ticks: String(index + 1)},
+      duration: 1, get name() { return name; }, enabled: spec.enabled !== false, muted: false, transitions: 0, trackName: spec.trackName ?? null};
   });
 
   let selection = null;
@@ -83,6 +83,7 @@ function setup(specs) {
     './premiere.js': host,
     './per-clip.js': {inventory: async () => entries},
     './amplify-params.js': load('amplify-params', () => { throw new Error('no deps'); }),
+    './music-select.js': require('../plugin/music-select.js'),
   }[n]));
 
   return {api, calls, entries, sequence, project, get selection() { return selection; }};
@@ -147,4 +148,30 @@ test('mono clips: a muted Amplify is found by its "Gain" slider, not just Left/R
   const result = await s.api.selectMuted({say: () => {}});
   assert.equal(result.clips, 1);
   assert.equal(result.names[0], 'mono-muted');
+});
+
+// Select music (2026-10-13)
+test('selectMusic selects every enabled clip whose clip or track name contains the filter', async () => {
+  const s = setup([
+    {name: 'ANW1234_01_Big Drums.wav', trackIndex: 2},
+    {name: 'Interview A cam', trackIndex: 0},
+    {name: 'anw5678 sting.wav', trackIndex: 3},
+    {name: 'bed.wav', trackIndex: 4, trackName: 'ANW music'},
+    {name: 'ANW9999 disabled.wav', trackIndex: 2, enabled: false},
+  ]);
+  const result = await s.api.selectMusic({terms: ['ANW'], say: () => {}});
+  assert.equal(result.clips, 3);
+  assert.deepEqual(result.names, ['ANW1234_01_Big Drums.wav', 'anw5678 sting.wav', 'bed.wav']);
+  assert.deepEqual([...result.tracks], [3, 4, 5]);
+  assert.equal(s.selection.items.length, 3);
+  assert.ok(s.calls.includes('set-selection:3'));
+});
+
+test('selectMusic takes several words and explains an empty result', async () => {
+  const s = setup([{name: 'APM_track.wav'}, {name: 'dialogue.wav'}]);
+  assert.equal((await s.api.selectMusic({terms: ['ANW', 'apm'], say: () => {}})).clips, 1);
+  const none = setup([{name: 'dialogue.wav'}]);
+  await assert.rejects(none.api.selectMusic({terms: ['ANW'], say: () => {}}), /No audio clips with "ANW".*Options > Ducking/);
+  assert.equal(none.selection, null);
+  await assert.rejects(none.api.selectMusic({terms: [], say: () => {}}), /Set the Select music filter/);
 });

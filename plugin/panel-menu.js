@@ -23,6 +23,7 @@ function menuItems({version, compact, noCache}) {
     '-',
     {id: 'saveSettings', label: 'Save settings…'},
     {id: 'loadSettings', label: 'Load settings…'},
+    {id: 'newPreset', label: 'New preset from current settings…'},
     '-',
     {id: 'compact', label: 'Compact panel', checked: Boolean(compact)},
     {id: 'noCache', label: "Don't use cached files", checked: Boolean(noCache)},
@@ -31,7 +32,7 @@ function menuItems({version, compact, noCache}) {
   ];
 }
 
-// hooks: click(id), toggleConnection(), getCompact(), setCompact(bool), getNoCache(), setNoCache(bool).
+// hooks: click(id), toggleConnection(), newPreset(), getCompact(), setCompact(bool), getNoCache(), setNoCache(bool).
 function createMenu({entrypoints, panelId, version, hooks}) {
   function setChecked(value, id = 'compact') {
     // Runtime menu updates are optional: without them the tick mark is only
@@ -48,6 +49,7 @@ function createMenu({entrypoints, panelId, version, hooks}) {
       hooks.setNoCache(next);
       setChecked(next, 'noCache');
     } else if (id === 'connectionSettings') hooks.toggleConnection();
+    else if (id === 'newPreset' && hooks.newPreset) hooks.newPreset();
     else if (CLICK_TARGETS.includes(id)) hooks.click(id);
   }
   let installed = false, error = null;
