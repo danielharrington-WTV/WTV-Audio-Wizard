@@ -29,8 +29,8 @@ source = Path(sys.argv[1]) if len(sys.argv) > 1 else PROJECT / 'Derev-Test' / 'i
 out = PROJECT / 'validation' / 'restore-speech' / time.strftime('%Y%m%d-%H%M%S')
 out.mkdir(parents=True)
 report = {'source': source.name}
-with TestClient(service.app) as client:
-    client.headers['Authorization'] = f'Bearer {service.TOKEN}'
+# Loopback client: no token since service 0.7.2.
+with TestClient(service.app, base_url='http://127.0.0.1:8756', client=('127.0.0.1', 50000)) as client:
     health = client.get('/v1/health').json()
     sidon = next(m for m in health['models'] if m['id'] == 'sidon')
     report['sidon_available'] = sidon['available']

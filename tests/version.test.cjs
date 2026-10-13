@@ -1,5 +1,5 @@
 // The panel version is written in six places; they must agree. The service
-// has its own version (0.7.1), which Connect checks exactly, so a panel-only
+// has its own version (0.7.2), which Connect checks exactly, so a panel-only
 // release must not change it.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -18,8 +18,8 @@ test('panel version is the same in the manifest, the heading, saved settings, th
   assert.ok(plugin('local-api.js').includes(`panel v${version}. Confirm UXP Developer Tool lists version ${version}.`), 'network help');
 });
 
-test('Connect still expects service 0.7.1, independent of the panel version', () => {
-  assert.ok(plugin('main.js').includes("health.service_version !== '0.7.1'"));
+test('Connect still expects service 0.7.2, independent of the panel version', () => {
+  assert.ok(plugin('main.js').includes("health.service_version !== '0.7.2'"));
 });
 
 test('settings saved by an older panel version still load', () => {

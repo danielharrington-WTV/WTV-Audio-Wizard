@@ -2,7 +2,7 @@
   "manifestVersion": 5,
   "id": "com.wtv.audiowizard",
   "name": "WTVAudioWizard",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "main": "index.html",
   "host": {
     "app": "premierepro",

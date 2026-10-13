@@ -1,5 +1,7 @@
 data/
 local-config.json
+WTVAudioWizard-Service/service.env
+work/
 __pycache__/
 .pytest_cache/
 .pytest-tmp/

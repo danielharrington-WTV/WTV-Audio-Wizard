@@ -1,19 +1,21 @@
-"""Single-user loopback service. Run one Uvicorn process/worker only."""
+"""Single-user service for this computer and the private LAN. Run one Uvicorn
+process/worker only. There is no pairing token (removed 2026-10-12): any client
+on loopback or an RFC 1918 network may use the API; see local_boundary."""
 from .audio import blend_dialogue
 import asyncio
 from contextlib import asynccontextmanager
 import hashlib
+import ipaddress
 import json
 import os
 from pathlib import Path
-import secrets
 import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 import soundfile as sf
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from .schema import JobRequest, Settings, DeplosiveRequest, LowEndRequest, QualityRequest
 from .quality import Analyzer as QualityAnalyzer
@@ -36,10 +38,7 @@ BASE = Path(__file__).resolve().parents[1]
 # for how the workspace is found).
 ROOT = Path(os.environ.get('WTV_DATA_DIR') or find_workspace(BASE) / 'work' / 'wtv-data').resolve()
 ROOT.mkdir(parents=True, exist_ok=True)
-TOKEN_PATH = ROOT / 'token.txt'
-if not TOKEN_PATH.exists():
-    TOKEN_PATH.write_text(secrets.token_urlsafe(32))
-TOKEN = TOKEN_PATH.read_text().strip()
+# token.txt from versions before 0.7.2 may still be in ROOT; it is unused.
 CONFIG_PATH = Path(os.environ.get('WTV_CONFIG', BASE / 'local-config.json'))
 CONFIG = json.loads(CONFIG_PATH.read_text()) if CONFIG_PATH.exists() else {}
 try:
@@ -141,20 +140,50 @@ async def lifespan(app):
     await asyncio.to_thread(POOL.shutdown, wait=True, cancel_futures=True)
     WORKER.release_idle()
 
-app = FastAPI(title='WTVAudioWizard', version='0.7.1', lifespan=lifespan)
+app = FastAPI(title='WTVAudioWizard', version='0.7.2', lifespan=lifespan)
+
+# Who may use the API. Spelled out rather than ipaddress.is_private, which
+# also admits link-local, CGNAT-adjacent, documentation and other ranges.
+LOOPBACK_NETWORKS = (ipaddress.ip_network('127.0.0.0/8'), ipaddress.ip_network('::1/128'))
+LAN_NETWORKS = (ipaddress.ip_network('10.0.0.0/8'), ipaddress.ip_network('172.16.0.0/12'), ipaddress.ip_network('192.168.0.0/16'))
+
+def allowed_address(text):
+    """True for a loopback or RFC 1918 IP address (IPv4-mapped IPv6 included)."""
+    try:
+        address = ipaddress.ip_address(str(text).split('%')[0])
+    except ValueError:
+        return False
+    if getattr(address, 'ipv4_mapped', None):
+        address = address.ipv4_mapped
+    return any(address in network for network in LOOPBACK_NETWORKS + LAN_NETWORKS)
+
+def allowed_host(header):
+    """Host header must name this machine by loopback/LAN address or localhost,
+    so a public DNS name rebound to a LAN address is refused."""
+    header = (header or '').strip().lower()
+    if header.startswith('['):
+        host, _, rest = header[1:].partition(']')
+        if rest and not (rest.startswith(':') and rest[1:].isdigit()):
+            return False
+    else:
+        host, _, port = header.partition(':')
+        if port and not port.isdigit():
+            return False
+    return host == 'localhost' or allowed_address(host)
 
 @app.middleware('http')
 async def local_boundary(request, call_next):
-    # The launcher binds loopback. Reject browser origins and unexpected Host headers.
+    # Runs before every route. The peer is the real socket address: the
+    # launcher does not enable proxy headers, so clients cannot forge it.
+    # Browser pages (any Origin other than UXP's absent/"null") are refused so a
+    # website open on a LAN machine cannot drive the API.
     from fastapi.responses import JSONResponse
-    host = request.headers.get('host', '').split(':')[0]
-    if host not in ('127.0.0.1', 'localhost', 'testserver') or request.headers.get('origin') not in (None, 'null'):
+    peer = request.client.host if request.client else ''
+    if not allowed_address(peer) or not allowed_host(request.headers.get('host')):
+        return JSONResponse({'detail': 'LAN client required'}, status_code=403)
+    if request.headers.get('origin') not in (None, 'null'):
         return JSONResponse({'detail': 'Local client required'}, status_code=403)
     return await call_next(request)
-
-def auth(request: Request):
-    if not secrets.compare_digest(request.headers.get('authorization', ''), f'Bearer {TOKEN}'):
-        raise HTTPException(401, 'Enter the local service token in the panel')
 
 def bandit_ready():
     cfg = CONFIG.get('bandit_v2', {})
@@ -175,16 +204,16 @@ def sidon_ready():
     cfg = CONFIG.get('sidon', {})
     return Path(cfg.get('python', '__missing__')).is_file() and all(Path(cfg.get('models', '__missing__'), name).is_file() for name in SIDON_FILES)
 
-@app.get('/v1/health', dependencies=[Depends(auth)])
+@app.get('/v1/health')
 def health():
-    return {'status': 'ok', 'capabilities': ['grouped_model_batch_v1', 'dnsmos_quality_v1', 'sidon_restore_v1', 'fresh_jobs_v1'], 'api_version': 1, 'service_version': '0.7.1', 'models': [
+    return {'status': 'ok', 'capabilities': ['grouped_model_batch_v1', 'dnsmos_quality_v1', 'sidon_restore_v1', 'fresh_jobs_v1'], 'api_version': 1, 'service_version': '0.7.2', 'models': [
         {'id': 'bandit_v2', 'default': True, 'available': bandit_ready(), 'native_rate': 48000, 'native_channels': 1, 'stereo_policy': 'independent_channels'},
         {'id': 'gap_urgenet', 'available': gap_ready(), 'task': 'raw_dialogue_cleanup'},
         {'id': 'mossformer2', 'available': mossformer_ready(), 'task': 'dialogue_cleanup'},
         {'id': 'sidon', 'available': sidon_ready(), 'task': 'speech_restoration', 'requires': 'cuda'},
         {'id': 'provided_stems', 'available': True}]}
 
-@app.get('/v1/defaults', dependencies=[Depends(auth)])
+@app.get('/v1/defaults')
 def defaults():
     return Settings().model_dump()
 
@@ -226,7 +255,7 @@ def run_quality(jid, body):
             QUALITY_JOBS[jid].update(**terminal)
 
 
-@app.post('/v1/quality-jobs', dependencies=[Depends(auth)], status_code=202)
+@app.post('/v1/quality-jobs', status_code=202)
 def submit_quality(body: QualityRequest):
     with LOCK:
         if QUALITY_POOL is None:
@@ -255,14 +284,14 @@ def submit_quality(body: QualityRequest):
         return {'job_id': jid}
 
 
-@app.get('/v1/quality-jobs/{jid}', dependencies=[Depends(auth)])
+@app.get('/v1/quality-jobs/{jid}')
 def get_quality(jid: str):
     with LOCK:
         if jid not in QUALITY_JOBS: raise HTTPException(404, 'Unknown quality job; the service may have restarted. Rerun the scan.')
         return dict(QUALITY_JOBS[jid])
 
 
-@app.delete('/v1/quality-jobs/{jid}', dependencies=[Depends(auth)])
+@app.delete('/v1/quality-jobs/{jid}')
 def cancel_quality(jid: str):
     with LOCK:
         if jid not in QUALITY_JOBS: raise HTTPException(404, 'Unknown quality job')
@@ -287,7 +316,7 @@ def validate_upload(path, aid, file_hash):
     (ROOT / f'{aid}.json').write_text(json.dumps(metadata))
     return metadata
 
-@app.post('/v1/assets', dependencies=[Depends(auth)], status_code=201)
+@app.post('/v1/assets', status_code=201)
 async def upload(request: Request):
     aid = uuid.uuid4().hex
     path = ROOT / f'{aid}.wav'
@@ -314,7 +343,7 @@ def get_job(jid):
             raise HTTPException(404, 'Unknown job')
         return dict(JOBS[jid])
 
-@app.post('/v1/music-analysis', dependencies=[Depends(auth)])
+@app.post('/v1/music-analysis')
 def music_analysis(body: MusicAnalysis):
     def read(aid):
         if not (ROOT / f'{aid}.json').is_file(): raise HTTPException(404, 'Unknown analysis asset')
@@ -335,14 +364,14 @@ def music_analysis(body: MusicAnalysis):
                 ASSET_PINS[aid] -= 1
                 if not ASSET_PINS[aid]: del ASSET_PINS[aid]
 
-@app.get('/v1/assets/{aid}/download', dependencies=[Depends(auth)])
+@app.get('/v1/assets/{aid}/download')
 def download_asset(aid: str):
     if not (ROOT / f'{aid}.json').is_file():
         raise HTTPException(404, 'Unknown asset')
     storage_cleanup.touch(ROOT / f'{aid}.json')
     return FileResponse(ROOT / f'{aid}.wav', media_type='audio/wav', filename=f'{aid}.wav')
 
-@app.post('/v1/deplosive', dependencies=[Depends(auth)])
+@app.post('/v1/deplosive')
 def deplosive(body: DeplosiveRequest):
     """Seeded, single-location plosive/pop attenuation (service.deplosive) on
     an already-uploaded asset -- e.g. a clean dialogue clip the panel exports
@@ -371,7 +400,7 @@ def deplosive(body: DeplosiveRequest):
             ASSET_PINS[body.asset_id] -= 1
             if not ASSET_PINS[body.asset_id]: del ASSET_PINS[body.asset_id]
 
-@app.post('/v1/lowend', dependencies=[Depends(auth)])
+@app.post('/v1/lowend')
 def lowend(body: LowEndRequest):
     """Psychoacoustic low-end enhancement (service.lowend) on an already-
     uploaded asset -- e.g. a clip the panel exports directly from whatever
@@ -398,7 +427,7 @@ def lowend(body: LowEndRequest):
             if not ASSET_PINS[body.asset_id]: del ASSET_PINS[body.asset_id]
 
 
-@app.delete('/v1/assets/{aid}', dependencies=[Depends(auth)])
+@app.delete('/v1/assets/{aid}')
 def delete_analysis_asset(aid: str):
     import re
     if not re.fullmatch(r'[0-9a-f]{32}',aid): raise HTTPException(404,'Unknown asset')
@@ -409,7 +438,7 @@ def delete_analysis_asset(aid: str):
         for suffix in ('wav','json'): (ROOT / f'{aid}.{suffix}').unlink(missing_ok=True)
     return {'deleted':True}
 
-@app.post('/v1/jobs', dependencies=[Depends(auth)], status_code=202)
+@app.post('/v1/jobs', status_code=202)
 def submit(body: JobRequest):
     needs_separation = body.settings.separate_music or body.settings.separate_ambience
     if needs_separation and body.settings.separator == 'bandit_v2' and not bandit_ready():
@@ -455,18 +484,18 @@ def submit(body: JobRequest):
         POOL.submit(run_job, jid)
     return {'job_id': jid, 'reused': False}
 
-@app.get('/v1/jobs/{jid}', dependencies=[Depends(auth)])
+@app.get('/v1/jobs/{jid}')
 def status(jid: str):
     return get_job(jid)
 
-@app.delete('/v1/jobs/{jid}', dependencies=[Depends(auth)])
+@app.delete('/v1/jobs/{jid}')
 def cancel(jid: str):
     job = get_job(jid)
     if job['status'] in ('queued', 'running'):
         CANCEL[jid].set()
     return {'job_id': jid, 'cancellation_requested': job['status'] in ('queued', 'running')}
 
-@app.get('/v1/jobs/{jid}/result/{stem}', dependencies=[Depends(auth)])
+@app.get('/v1/jobs/{jid}/result/{stem}')
 def result(jid: str, stem: str):
     job = get_job(jid)
     if stem not in ('dialogue', 'music', 'effects', 'mix'):
@@ -512,7 +541,7 @@ def model_run(jid,name,key,args,log,check,verify,source,start,end):
     history.record(name,work,time.monotonic()-t0,cold=not status.get('worker_reused',not cold))
     return status
 
-@app.post('/v1/workers/release', dependencies=[Depends(auth)])
+@app.post('/v1/workers/release')
 def release_worker():
     return {'released':WORKER.release_idle()}
 

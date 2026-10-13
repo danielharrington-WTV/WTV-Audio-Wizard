@@ -1,7 +1,7 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"></head>
 <body>
-<div class="heading"><span id="headingConnected" class="heading-connected" title="Connected to the service. Panel menu &gt; Connection settings shows the connection row."></span><select id="presetSelect" title="Project-type preset. Each preset keeps its own settings; switch any time." aria-label="Project preset"><option value="promo">Promo/Action</option><option value="interview">Interview</option><option value="camcorder">Camcorder</option><option value="natural">Natural (MossFormer)</option><option value="stems">Stem separation</option></select><span class="subtle">v0.8.2</span></div>
+<div class="heading"><span id="headingConnected" class="heading-connected" title="Connected to the service. Panel menu &gt; Connection settings shows the connection row."></span><select id="presetSelect" title="Project-type preset. Each preset keeps its own settings; switch any time." aria-label="Project preset"><option value="promo">Promo/Action</option><option value="interview">Interview</option><option value="camcorder">Camcorder</option><option value="natural">Natural (MossFormer)</option><option value="stems">Stem separation</option></select><span class="subtle">v0.8.3</span></div>
 <div class="tab-bar" role="tablist" aria-label="Panel sections">
 <div id="tabMainBtn" role="tab" class="tab active" aria-selected="true" aria-controls="tabMain" title="Workflow steps">Main</div>
 <div id="tabOptionsBtn" role="tab" class="tab" aria-selected="false" aria-controls="tabOptions" title="Settings and preferences">Options</div>
@@ -13,13 +13,12 @@
 <div class="destination-folder-row"><div id="openDestinationFolder" role="button" class="secondary destination-folder-btn" title="Open the export folder in File Explorer. When it reads No folder, click to choose one."><span class="folder-icon" aria-hidden="true"><span class="folder-icon-tab"></span><span class="folder-icon-body"></span></span><span id="destinationFolderName" class="destination-folder-name">No folder</span></div><div id="changeFolder" role="button" class="secondary change-folder-btn" title="Choose a different export folder for this project. The picker starts in the folder the project is saved in until you have chosen one. Your choice is remembered for this project. Files are saved in a WTVAudioWizard folder inside it.">Change</div></div>
 <div id="connectionBlock" class="section">
 <div class="section-toggle-row">
-<div id="toggleConnection" role="button" class="section-toggle" aria-controls="connectionSection" title="Show or hide the local service connection settings">Connection</div>
+<div id="toggleConnection" role="button" class="section-toggle" aria-controls="connectionSection" title="Show or hide the service connection settings">Connection</div>
 <span id="connectionStatus" class="connection-status" role="status" aria-live="polite"><span class="connection-dot"></span><span id="connectionStatusText">Not connected</span></span>
 </div>
 <div id="connectionSection" class="section-content">
-<label class="field-row"><span>Service</span><input id="baseUrl" value="http://127.0.0.1:8756" aria-label="Local service URL"></label>
-<label class="field-row"><span>Token</span><input id="token" type="text" spellcheck="false" placeholder="From service window"></label>
-<div id="connect" role="button" title="Connect to the local WTVAudioWizard service">Connect</div>
+<label class="field-row" title="This computer: http://127.0.0.1:8756. GPU server on the local network: http://&lt;its LAN address&gt;:8756, for example http://192.168.0.176:8756. No token is needed."><span>Service</span><input id="baseUrl" value="http://127.0.0.1:8756" spellcheck="false" placeholder="http://192.168.0.176:8756" aria-label="Service URL (this computer or a LAN server)"></label>
+<div id="connect" role="button" title="Connect to the WTVAudioWizard service at the Service URL (this computer or a server on the local network)">Connect</div>
 </div></div>
 <div class="section">
 <div class="section-content">
@@ -130,7 +129,7 @@
 <div class="step-row"><div id="saveSettings" role="button" class="secondary" title="Save the current settings to a file">Save settings</div><div id="loadSettings" role="button" class="secondary" title="Load settings from a previously saved file">Load settings</div></div>
 <p class="subtle">Valid changes are remembered automatically. Save named files to keep reusable presets. Connection details and sequence track choices stay separate.</p>
 <div id="resetAllOptions" role="button" class="secondary" title="Reset every setting on this preset to its factory defaults. Other presets are untouched.">Reset this preset to defaults</div>
-<p class="subtle">Clean dialogue, levels, ducking, and panel-only options. Service URL, token, and per-sequence duck track picks are unchanged.</p>
+<p class="subtle">Clean dialogue, levels, ducking, and panel-only options. Service URL and per-sequence duck track picks are unchanged.</p>
 <div id="toggleChangedSettings" role="button" class="section-toggle nested options-toggle" aria-controls="changedSettingsSection" aria-expanded="false" title="List which of this preset's settings differ from factory defaults">+ Changed from defaults</div>
 <div id="changedSettingsSection" style="display:none">
 <p id="changedSettingsList" class="subtle">No changes from factory defaults.</p>

@@ -7,14 +7,14 @@ import sys
 import numpy as np
 import soundfile as sf
 from fastapi.testclient import TestClient
-from service.app import app, TOKEN
+from service.app import app
 enhancer = sys.argv[1] if len(sys.argv) > 1 else 'gap_urgenet'
 selection = sys.argv[2] if len(sys.argv) > 2 else 'none'
 options = {'separate_music':selection in ('music','both'), 'separate_ambience':selection in ('ambience','both')}
 expected_stems = ['dialogue'] + (['effects'] if options['separate_ambience'] else []) + (['music'] if options['separate_music'] else [])
 
-with TestClient(app) as client:
-    client.headers['Authorization'] = f'Bearer {TOKEN}'
+# Loopback client: no token since service 0.7.2.
+with TestClient(app, base_url='http://127.0.0.1:8756', client=('127.0.0.1', 50000)) as client:
     t = np.arange(44100) / 44100
     x = (.025 * np.sin(2*np.pi*400*t)).astype(np.float32)
     file = io.BytesIO()

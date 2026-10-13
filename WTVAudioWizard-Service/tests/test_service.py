@@ -23,8 +23,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(app, 'JOBS', {})
     monkeypatch.setattr(app, 'CANCEL', {})
     monkeypatch.setattr(app, 'CONFIG', {})
-    with TestClient(app.app) as c:
-        c.headers['Authorization'] = f'Bearer {app.TOKEN}'
+    with TestClient(app.app, base_url='http://192.168.0.176:8756', client=('192.168.25.252', 50000)) as c:
         yield c, app
 
 def upload(c, x):
@@ -41,12 +40,43 @@ def wait(c, jid):
         time.sleep(.02)
     raise AssertionError('Job did not finish')
 
-def test_auth_and_origin(client):
-    c, _ = client
-    assert c.get('/v1/health', headers={'Authorization': ''}).status_code == 401
+def test_lan_boundary_without_token(client):
+    # Token removed 2026-10-12: a LAN client (the Mac at 192.168.25.252) reaches
+    # the GPU server at 192.168.0.176 with no Authorization header at all.
+    c, app = client
+    assert 'authorization' not in {k.lower() for k in c.headers}
+    health = c.get('/v1/health')
+    assert health.status_code == 200 and health.json()['service_version'] == '0.7.2'
+    assert c.get('/v1/defaults').status_code == 200
+    assert c.get('/v1/health', headers={'Authorization': 'Bearer anything'}).status_code == 200
+    assert not hasattr(app, 'TOKEN') and not hasattr(app, 'auth')
+    # Browser pages are refused, whatever their address.
     assert c.get('/v1/health', headers={'Origin': 'https://example.com'}).status_code == 403
-    assert c.get('/v1/health', headers={'Host': 'attacker.example'}).status_code == 403
-    assert c.get('/v1/health').status_code == 200
+    assert c.get('/v1/health', headers={'Origin': 'http://192.168.0.176:8756'}).status_code == 403
+    assert c.get('/v1/health', headers={'Origin': 'null'}).status_code == 200
+    # Host must be a loopback/LAN literal or localhost (no DNS rebinding).
+    for host in ('attacker.example', '192.168.0.176.nip.io', '8.8.8.8:8756', '[2001:db8::1]:8756', '192.168.0.176:x', '', 'testserver'):
+        assert c.get('/v1/health', headers={'Host': host}).status_code == 403, host
+    for host in ('192.168.0.176:8756', '127.0.0.1:8756', 'localhost:8756', '10.1.2.3', '172.20.0.1:8756', '[::1]:8756'):
+        assert c.get('/v1/health', headers={'Host': host}).status_code == 200, host
+
+@pytest.mark.parametrize('peer, allowed', [
+    ('127.0.0.1', True), ('192.168.25.252', True), ('192.168.0.205', True), ('10.0.0.9', True), ('172.31.0.2', True), ('::1', True), ('::ffff:192.168.25.252', True),
+    ('8.8.8.8', False), ('172.32.0.1', False), ('100.64.0.1', False), ('169.254.1.1', False), ('192.0.2.1', False), ('2001:db8::1', False), ('fd00::1', False), ('testclient', False)])
+def test_peer_address_policy_is_exactly_loopback_and_rfc1918(tmp_path, monkeypatch, peer, allowed):
+    app = importlib.import_module('service.app')
+    monkeypatch.setattr(app, 'ROOT', tmp_path)
+    monkeypatch.setattr(app, 'JOBS', {})
+    monkeypatch.setattr(app, 'CANCEL', {})
+    monkeypatch.setattr(app, 'CONFIG', {})
+    with TestClient(app.app, base_url='http://192.168.0.176:8756', client=(peer, 50000)) as c:
+        assert c.get('/v1/health').status_code == (200 if allowed else 403)
+        # Refused before any mutation: nothing is stored for a public peer.
+        response = c.post('/v1/assets', content=wav(np.zeros(4800)), headers={'content-type': 'audio/wav'})
+        assert response.status_code == (201 if allowed else 403)
+        assert c.get('/v1/health', headers={'X-Forwarded-For': '8.8.8.8'}).status_code == (200 if allowed else 403)
+    if not allowed:
+        assert not list(tmp_path.glob('*.wav'))
 
 def test_music_analysis_and_temporary_asset_cleanup(client):
     c, app = client
@@ -55,13 +85,13 @@ def test_music_analysis_and_temporary_asset_cleanup(client):
     music=upload(c,x); dialogue=upload(c,np.zeros_like(x))
     probe=upload(c,x*10**((-3-6*t)/20))
     body={'music_asset':music,'dialogue_asset':dialogue,'probe_asset':probe}
-    assert c.post('/v1/music-analysis',json=body,headers={'Authorization':''}).status_code==401
+    assert c.post('/v1/music-analysis',json=body,headers={'Host': 'attacker.example'}).status_code == 403
     result=c.post('/v1/music-analysis',json=body)
     assert result.status_code==200,result.text
     assert result.json()['calibration']['passed']
     assert result.json()['baseline_gain_db']==pytest.approx(-4.9897,abs=.001)
     assert not list(app.ROOT.glob('*/result/*.wav'))
-    assert c.delete(f'/v1/assets/{music}',headers={'Authorization':''}).status_code==401
+    assert c.delete(f'/v1/assets/{music}',headers={'Host': 'attacker.example'}).status_code == 403
     app.JOBS['test']={'request':{'tracks':[{'asset_id':music}]}}
     assert c.delete(f'/v1/assets/{music}').status_code==409
     app.JOBS.clear()
@@ -81,7 +111,7 @@ def test_deplosive_attenuates_a_seeded_burst_and_result_is_downloadable(client):
     burst = .5 * np.exp(-tb / .05) * np.sin(2 * np.pi * 50 * tb)
     x[seed_i:seed_i + n] += burst
     aid = upload(c, x.astype(np.float32))
-    assert c.post('/v1/deplosive', json={'asset_id': aid, 'seed_seconds': 1.0}, headers={'Authorization': ''}).status_code == 401
+    assert c.post('/v1/deplosive', json={'asset_id': aid, 'seed_seconds': 1.0}, headers={'Host': 'attacker.example'}).status_code == 403
     response = c.post('/v1/deplosive', json={'asset_id': aid, 'seed_seconds': 1.0})
     assert response.status_code == 200, response.text
     body = response.json()
@@ -111,7 +141,7 @@ def test_deplosive_seed_outside_signal_duration_returns_422_not_500(client):
 def test_download_unknown_asset_404(client):
     c, _ = client
     assert c.get(f"/v1/assets/{'0'*32}/download").status_code == 404
-    assert c.get(f"/v1/assets/{'0'*32}/download", headers={'Authorization': ''}).status_code == 401
+    assert c.get(f"/v1/assets/{'0'*32}/download", headers={'Host': 'attacker.example'}).status_code == 403
 
 def test_deplosive_unpins_the_source_asset_after_completion(client):
     c, _ = client
@@ -155,7 +185,7 @@ def test_analysis_reads_do_not_hold_job_lock_and_assets_stay_pinned(client,monke
 
 def test_worker_release_is_authenticated(client):
     c,app=client
-    assert c.post('/v1/workers/release',headers={'Authorization':''}).status_code==401
+    assert c.post('/v1/workers/release',headers={'Host': 'attacker.example'}).status_code == 403
     assert c.post('/v1/workers/release').json()=={'released':True}
 
 def test_upload_rejects_invalid_and_surround(client):
@@ -308,7 +338,7 @@ def test_lowend_enhances_a_whole_clip_and_result_is_downloadable(client):
     rate = 48000
     x = .05 * np.sin(2 * np.pi * 100 * np.arange(2 * rate) / rate).astype(np.float32)  # inside lowend.LOWPASS_HZ
     aid = upload(c, x)
-    assert c.post('/v1/lowend', json={'asset_id': aid}, headers={'Authorization': ''}).status_code == 401
+    assert c.post('/v1/lowend', json={'asset_id': aid}, headers={'Host': 'attacker.example'}).status_code == 403
     response = c.post('/v1/lowend', json={'asset_id': aid})
     assert response.status_code == 200, response.text
     body = response.json()

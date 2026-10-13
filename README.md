@@ -1,6 +1,9 @@
-# WTVAudioWizard — panel 0.8.2, service 0.7.1
+# WTVAudioWizard — panel 0.8.3, service 0.7.2
 
-## Current state (2026-10-09)
+## Current state (2026-10-12)
+
+**Panel 0.8.3 / service 0.7.2 (2026-10-12): no pairing token, LAN access.** The Token field and the service's pairing token are gone (Dan's request). The service accepts any client on this computer (loopback) or on a private LAN (10.x, 172.16-31.x, 192.168.x) with a matching Host header, and still refuses browser pages (any `Origin`). The panel's Service URL accepts `http://127.0.0.1:8756`, `http://localhost:8756` or a private LAN IPv4 address on port 8756, e.g. the GPU server `http://192.168.0.176:8756`, and remembers the last URL that connected. The panel requires service 0.7.2 exactly, so update and restart the service together with the plugin. The listening address is `WTV_HOST` (or `WTV_HOST=` in a git-ignored `WTVAudioWizard-Service/service.env` on Linux), default `127.0.0.1`.
+
 
 **Panel 0.8.2** (2026-10-06) is 0.8.1 plus everything added since 2026-09-29: Rebuild Speech, the Batch Process Options menu (first called Processing) with separate Level and De-ess, live progress, Mute raw when done, the renames below, and the per-project export folder with its `WTVAudioWizard` subfolder. The service is still version 0.7.1 and the panel still requires exactly that, so only the plugin needs reloading for the version change. Settings files and saved preferences from 0.8.1 load unchanged.
 
@@ -12,7 +15,7 @@ This folder holds the Premiere panel (`plugin/`), its tests, the operator guide 
 & 'C:\Users\Dan\Documents\Codex\2026-09-05\files-pasted-by-the-user-wtvaudiowizard\outputs\WTVAudioWizard\WTVAudioWizard-Service\start-service.ps1'
 ```
 
-Then load `plugin/manifest.json` in UXP Developer Tool, open Connection in the panel, paste the token the service prints and click Connect.
+Then load `plugin/manifest.json` in UXP Developer Tool, open Connection in the panel, enter the Service URL the service prints (`http://127.0.0.1:8756` on the same computer, `http://192.168.0.176:8756` for the Debian GPU server) and click Connect. No token is needed.
 
 **Main tab today.** Names changed on 2026-10-01 and 2026-10-06; older sections below use the names of their time.
 
@@ -144,8 +147,8 @@ Track renaming is optional because the installed Premiere build does not expose 
    & 'C:\Users\Dan\Documents\Codex\2026-09-05\files-pasted-by-the-user-wtvaudiowizard\outputs\WTVAudioWizard\WTVAudioWizard-Service\start-service.ps1'
    ```
 
-3. In UXP Developer Tool, unload the old plugin and use **Load & Watch** with this build's `plugin/manifest.json`. Keep the complete plugin folder together. The panel should show **v0.8.2**.
-4. Connect at `http://127.0.0.1:8756`. The existing pairing token remains valid unless its stored file/data directory is removed or changed. The panel requires service v0.7.1 and checks that the selected dialogue worker is available before processing. Open **Clean dialogue → Cleanup** to choose MossFormer2 or GAP-URGENet. The selection is saved with your settings.
+3. In UXP Developer Tool, unload the old plugin and use **Load & Watch** with this build's `plugin/manifest.json`. Keep the complete plugin folder together. The panel should show **v0.8.3**.
+4. Connect at `http://127.0.0.1:8756` (or the GPU server's LAN URL, e.g. `http://192.168.0.176:8756`). There is no pairing token. The panel requires service v0.7.2 and checks that the selected dialogue worker is available before processing. Open **Clean dialogue → Cleanup** to choose MossFormer2 or GAP-URGENet. The selection is saved with your settings.
 5. Start with a short sequence. Leave **Process selected dialogue clips only** checked and select all audible dialogue on dedicated tracks. Keep existing music on separate, unselected tracks. In default Per clip mode, step 1 asks for an output folder and creates the clone and isolated render sequences. WAV presets are chosen automatically. Wait for Premiere to finish **all** exports before step 2.
    - **Ducking finds Clean dialogue on its own:** the default reference now recognizes WTV's inserted stems by their file/item/track names, not just the current session's memory — so it keeps working after a reload, a second batch, or when ducking offline. Choose tracks is still there for anything else.
    - **Reuse across runs:** exports land in a stable `<sequence>-clips` folder with stable per-clip file names. Re-running Prepare on clips that already have a valid export there skips the export; re-running Clean audio with the same settings on clips whose processed stems are already in the folder skips the upload and processing. Change the clip or the settings and only that part is redone.
@@ -186,11 +189,11 @@ Preview limits: 250 enabled clips per batch, 512 MiB upload per WAV, mono/stereo
 
 The MossFormer checkpoint is copied under `../../work/mossformer-runtime/checkpoints/MossFormer2_SE_48K`. The worker uses the existing ClearVoice Python 3.10 / PyTorch 2.7.1+cu128 environment referenced by `local-config.json`, without modifying that environment. Numba caches live in writable workspace runtime/job folders. Checkpoints and environments are not bundled in the ZIP; this is a machine-configured development build, not a portable installer.
 
-The service uses Python 3.12 at `../../work/service-env` (the same location seen from the service folder; `WTV_WORKSPACE` moves it). To recreate it, make that virtual environment with Python 3.12 and install `requirements.lock.txt`. Bandit uses its separately configured working CUDA environment; do not replace it with upstream's old Torch dependencies. `WTV_CONFIG` overrides the configuration file; `WTV_DATA_DIR` overrides jobs and token storage. Processing uploads/results remain retained. Temporary music-analysis uploads are deleted after the pass.
+The service uses Python 3.12 at `../../work/service-env` (the same location seen from the service folder; `WTV_WORKSPACE` moves it). To recreate it, make that virtual environment with Python 3.12 and install `requirements.lock.txt`. Bandit uses its separately configured working CUDA environment; do not replace it with upstream's old Torch dependencies. `WTV_CONFIG` overrides the configuration file; `WTV_DATA_DIR` overrides job storage (a `token.txt` left there by older versions is unused). Processing uploads/results remain retained. Temporary music-analysis uploads are deleted after the pass.
 
 ## API and connection
 
-All `/v1` endpoints require `Authorization: Bearer <token>`. Health and defaults use GET `/v1/health` and `/v1/defaults`. POST WAV bytes to `/v1/assets`, then POST a job to `/v1/jobs`:
+There is no token: `/v1` endpoints accept any loopback or private-LAN (RFC 1918) client whose Host header is a loopback/LAN IP address or `localhost`, and refuse requests carrying a browser `Origin` (403). Health and defaults use GET `/v1/health` and `/v1/defaults`. POST WAV bytes to `/v1/assets`, then POST a job to `/v1/jobs`:
 
 ```json
 {"tracks":[{"asset_id":"UPLOAD_ID_HERE","role":"mixture"}],"settings":{"separator":"bandit_v2","enhancer":"gap_urgenet","separate_ambience":false,"separate_music":false,"deess_declick":false,"output_rate":48000}}
@@ -198,7 +201,7 @@ All `/v1` endpoints require `Authorization: Bearer <token>`. Health and defaults
 
 `deess_declick` defaults to `false`; enable it explicitly via the checkbox or API for the experimental combined repair. GET `/v1/jobs/{id}` reports progress and result metadata, including `enhancement` model/GPU metrics and a `deess_declick` object (`clicks_repaired`, `samples_repaired`, `repairs` — each with `start_seconds`/`duration_seconds`/`channels` — `repairs_truncated`, `avg_gain_reduction_db`, `max_gain_reduction_db`); it is `null` when the setting is off. DELETE requests cancellation. GET `/v1/jobs/{id}/result/{stem}` returns `dialogue`, `effects`, `music` or `mix`. The effects API name corresponds to the Ambience track. The panel downloads only requested outputs, not the combined mix. `separate_ambience`, `separate_music` and `deess_declick` all default to false in the API too. `dialogue_postprocess` is Level & compress (leveling, compression, whisper lift); `deess` switches de-essing on its own and, when omitted or null, follows `dialogue_postprocess` as it did before the split. Unrequested result endpoints return 404. Bandit availability is not required for dialogue-only jobs. Set `enhancer` to `mossformer2`, `gap_urgenet` or `sidon` (speech restoration; the panel uses it with `dialogue_postprocess: false` for Restore Speech). Result metadata records `enhancement.input_source: "raw_audio"` for mixture jobs. Provided-stem jobs enhance the explicitly supplied dialogue stem. Provided-stem callers can use `separator: "provided_stems"` with dialogue/music/effects roles. Cleanup and checkpoint identity are included in cache identity, so old uncleaned dialogue cannot satisfy a cleanup job.
 
-The UXP manifest retains `network.domains: "all"` for the previously diagnosed host permission issue. Panel code restricts requests to loopback HTTP on port 8756; this is not equivalent to a platform network sandbox. See the architecture notes. Run one local service process and one worker; this is not an internet service.
+The UXP manifest retains `network.domains: "all"` for the previously diagnosed host permission issue. Panel code restricts requests to loopback or private-LAN IPv4 HTTP on port 8756; this is not equivalent to a platform network sandbox. See the architecture notes. Run one service process and one worker; this is not an internet service, and anyone on the office LAN can submit jobs.
 
 ## Validation
 

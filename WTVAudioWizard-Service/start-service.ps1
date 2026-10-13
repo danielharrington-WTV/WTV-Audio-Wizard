@@ -17,9 +17,14 @@ if (-not $workspaceRoot) {
 if (-not $workspaceRoot) { $workspaceRoot = Split-Path (Split-Path $projectRoot -Parent) -Parent }
 $servicePython = Join-Path $workspaceRoot 'work\service-env\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $servicePython)) { throw "Service environment not found at $servicePython. See README.md." }
-# Pass the choice on, so the service's data folder and pairing token come from the same workspace.
+# Pass the choice on, so the service's data folder comes from the same workspace.
 $env:WTV_WORKSPACE = $workspaceRoot
+# Listening address: WTV_HOST if set, otherwise 127.0.0.1 (this computer only).
+# Set it to this PC's LAN IPv4 address to serve other machines. No pairing token:
+# the service accepts only loopback and private-LAN clients.
+$listenHost = if ($env:WTV_HOST) { $env:WTV_HOST } else { '127.0.0.1' }
+if ($listenHost -notmatch '^\d{1,3}(\.\d{1,3}){3}$') { throw "WTV_HOST must be an IPv4 address (got '$listenHost')." }
 Write-Host "Workspace: $workspaceRoot"
+Write-Host "Service URL for the panel: http://${listenHost}:8756 (no token needed)"
 Set-Location -LiteralPath $projectRoot
-& $servicePython -c "from service.app import TOKEN; print('Panel token: ' + TOKEN)"
-& $servicePython -m uvicorn service.app:app --host 127.0.0.1 --port 8756 --workers 1
+& $servicePython -m uvicorn service.app:app --host $listenHost --port 8756 --workers 1 --no-proxy-headers

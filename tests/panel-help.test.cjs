@@ -31,7 +31,17 @@ test('every kept file goes through the WTVAudioWizard output folder; Full sequen
  assert.match(prepare,/await resolveOutputFolder\(context\)/);assert.doesNotMatch(prepare,/resolveWorkFolder\(/);
 });
 
-test('the service token is shown as plain text, not dots (Dan, 2026-10-09)',()=>{
+test('the token field is gone; the Service URL takes this computer or a LAN server (Dan, 2026-10-12)',()=>{
  const html=require('node:fs').readFileSync(require.resolve('../plugin/index.html'),'utf8');
- assert.match(html,/<input id="token" type="text" spellcheck="false"/);assert.doesNotMatch(html,/id="token" type="password"/);
+ assert.doesNotMatch(html,/id="token"/);assert.doesNotMatch(html,/>Token</);
+ assert.match(html,/<input id="baseUrl" value="http:\/\/127\.0\.0\.1:8756"/);assert.match(html,/192\.168\.0\.176:8756/);
+});
+test('the panel remembers the connected service URL and sends no pairing token',()=>{
+ const main=require('node:fs').readFileSync(require.resolve('../plugin/main.js'),'utf8');
+ assert.doesNotMatch(main,/clientToken|\$\('token'\)|secureStorage\.setItem/);
+ const at=main.indexOf("action('connect', async");const connect=main.slice(at,at+1500);
+ assert.match(connect,/localStorage\.setItem\(SERVICE_URL_KEY, clientBase\)/);
+ assert.match(main,/localStorage\.getItem\(SERVICE_URL_KEY\)/);
+ assert.match(main,/Bearer \[redacted\]/,'older error text is still redacted');
+ assert.match(main,/requestLocal\(clientBase, path, options\)/);
 });

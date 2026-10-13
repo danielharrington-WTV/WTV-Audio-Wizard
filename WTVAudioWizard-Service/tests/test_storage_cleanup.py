@@ -126,8 +126,7 @@ def test_service_cleans_at_start_and_forgets_removed_jobs(tmp_path, monkeypatch)
     app = importlib.import_module('service.app')
     for name, value in (('ROOT', tmp_path), ('JOBS', {}), ('CANCEL', {}), ('CONFIG', {}), ('RETENTION_DAYS', 14)):
         monkeypatch.setattr(app, name, value)
-    with TestClient(app.app) as c:
-        c.headers['Authorization'] = f'Bearer {app.TOKEN}'
+    with TestClient(app.app, base_url='http://192.168.0.176:8756', client=('192.168.25.252', 50000)) as c:
         assert c.get(f'/v1/jobs/{old}').status_code == 404
         assert c.get(f'/v1/jobs/{recent}').status_code == 200
     assert not (tmp_path / f'{ids(31)}.wav').exists() and (tmp_path / f'{ids(32)}.wav').exists()

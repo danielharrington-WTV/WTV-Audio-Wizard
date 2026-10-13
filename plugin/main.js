@@ -108,7 +108,8 @@ for (const id of ['toggleConnection', 'connect', 'runCleanDialogue', 'musicPass'
   'toggleProcessing', 'toggleCleanDialogue', 'toggleLevelsStems', 'toggleDucking', 'toggleLoudness', 'toggleChangedSettings', 'togglePresets', 'openDestinationFolder', 'changeFolder']) makeButtonDiv($(id));
 let musicContextRevision=0;
 let context, musicContext, activeAction, jobId, jobResult, busy = false, factory, availableModels = [];
-let clientBase, clientToken;
+let clientBase;
+const SERVICE_URL_KEY = 'wtv-service-url'; // Last service URL that connected; restored on load.
 let cancelled = false;
 let lastError = null;
 let lastMusicReport = null;
@@ -268,7 +269,7 @@ function reportError(error, actionName) {
   say(lastError.message);
 }
 function diagnosticReport() {
-  const report = ['WTVAudioWizard panel v0.8.2', `Panel menu: ${panelMenuState.installed ? 'installed' : 'not installed (' + panelMenuState.error + ')'} \u00b7 compact ${document.body.classList.contains('compact') ? 'on' : 'off'}`, `Mode: ${$('mode').value}`,
+  const report = ['WTVAudioWizard panel v0.8.3', `Panel menu: ${panelMenuState.installed ? 'installed' : 'not installed (' + panelMenuState.error + ')'} \u00b7 compact ${document.body.classList.contains('compact') ? 'on' : 'off'}`, `Mode: ${$('mode').value}`,
     `Dialogue: ${$('enableEnhancer').checked ? $('enhancer').value : 'raw (no model)'} \u00b7 level ${$('dialoguePostprocess').checked ? 'on' : 'off'} \u00b7 de-ess ${$('deess').checked ? 'on' : 'off'}`,
     `De-click: ${$('deessDeclick').checked}`,
     `Handles: ${$('handlesEnabled').checked ? $('handleSeconds').value + ' s per side (per clip only)' : 'off'}`,
@@ -297,11 +298,9 @@ function diagnosticReport() {
     lastCleanDialogueTiming?.service?.totals ? `Clean dialogue service phases: ${JSON.stringify(lastCleanDialogueTiming.service.totals)}` : '',
     lastError ? `Last error (${lastError.action}): ${lastError.message}\n${lastError.stack}` : '',
     'Recent status:', ...recentStatus].filter(Boolean).join('\n');
-  let sanitized = report.replace(/Bearer\s+[^\s"']+/gi, 'Bearer [redacted]');
-  for (const token of [clientToken, $('token').value.trim()]) {
-    if (token) sanitized = sanitized.split(token).join('[redacted]');
-  }
-  return sanitized;
+  // No pairing token since v0.8.3, but error text from an older service or
+  // panel may still quote one.
+  return report.replace(/Bearer\s+[^\s"']+/gi, 'Bearer [redacted]');
 }
 $('copyReport').addEventListener('click', async () => {
   const report = diagnosticReport();
@@ -336,7 +335,7 @@ function freshJobBody(options) {
 }
 async function request(path, options = {}) {
   if (path === '/v1/jobs') options = freshJobBody(options);
-  return requestLocal(clientBase, clientToken, path, options);
+  return requestLocal(clientBase, path, options);
 }
 // Batch Process Dialogue's Processing menu (Main tab): the step checkboxes, in the
 // order the service runs them. Locked while anything is running.
@@ -570,7 +569,7 @@ function setCompact(on) {
 }
 document.body.classList.toggle('compact', optionsUi.compact === true);
 const panelMenuState = panelMenu.createMenu({
-  entrypoints: uxp.entrypoints, panelId: 'wtvAudioWizard', version: '0.8.2',
+  entrypoints: uxp.entrypoints, panelId: 'wtvAudioWizard', version: '0.8.3',
   hooks: {
     click: id => $(id).click(),
     getCompact: () => document.body.classList.contains('compact'),
@@ -833,13 +832,14 @@ action('changeFolder', async () => { await chooseExportFolder(); });
 action('connect', async () => {
   factory = null;
   updateConnectionStatus('connecting');
-  clientBase = normalizeBaseUrl($('baseUrl').value); clientToken = $('token').value.trim();
+  clientBase = normalizeBaseUrl($('baseUrl').value);
   const health = await (await request('/v1/health')).json();
-  if (health.service_version !== '0.7.1') throw new Error('Restart the updated v0.7.1 local service.');
+  if (health.service_version !== '0.7.2') throw new Error(`The service at ${clientBase} is v${health.service_version || 'unknown'}; this panel needs v0.7.2. Update the service (git pull) and restart it.`);
   availableModels = health.models;
   serviceCapabilities = Array.isArray(health.capabilities) ? health.capabilities : [];
   factory = await (await request('/v1/defaults')).json();
-  await uxp.storage.secureStorage.setItem('wtv-token', clientToken);
+  $('baseUrl').value = clientBase;
+  try { localStorage.setItem(SERVICE_URL_KEY, clientBase); } catch (_) { /* Remembering is optional. */ }
   setConnectionOpen(false);
   document.body.classList.remove('show-connection');
   // `context` is in-memory only and does not survive a panel reload/Premiere
@@ -1542,9 +1542,13 @@ function rememberScrollPosition() {
 $('panelScroll').addEventListener('scroll', () => { updateScrollIndicators(); rememberScrollPosition(); });
 window.addEventListener('resize', updateScrollIndicators);
 updateScrollIndicators();
-uxp.storage.secureStorage.getItem('wtv-token').then(bytes => {
-  $('token').value = String.fromCharCode(...new Uint8Array(bytes));
-}).catch(() => {});
+try {
+  const savedUrl = localStorage.getItem(SERVICE_URL_KEY);
+  if (savedUrl) $('baseUrl').value = normalizeBaseUrl(savedUrl);
+} catch (_) { /* Keep the default URL. */ }
+// The pairing token was retired in v0.8.3; drop the copy older panels saved.
+// (UXP folder persistent tokens are unrelated and stay.)
+try { Promise.resolve(uxp.storage.secureStorage.removeItem('wtv-token')).catch(() => {}); } catch (_) {}
 
 
 async function refreshMusicContext() {

@@ -15,8 +15,7 @@ def api(tmp_path, monkeypatch):
     monkeypatch.setattr(app, 'JOBS', {})
     monkeypatch.setattr(app, 'CANCEL', {})
     monkeypatch.setattr(app, 'ASSET_PINS', {})
-    with TestClient(app.app) as client:
-        client.headers['Authorization'] = f'Bearer {app.TOKEN}'
+    with TestClient(app.app, base_url='http://192.168.0.176:8756', client=('192.168.25.252', 50000)) as client:
         yield client, app
 
 
@@ -55,7 +54,7 @@ def test_real_cpu_api_and_disposable_upload(api):
 def test_auth_validation_and_unknown_asset(api):
     client,app=api
     payload={'asset_id':'a'*32}
-    assert client.post('/v1/quality-jobs',json=payload,headers={'Authorization':''}).status_code==401
+    assert client.post('/v1/quality-jobs',json=payload,headers={'Host': 'attacker.example'}).status_code == 403
     assert client.post('/v1/quality-jobs',json={'asset_id':'../secret'}).status_code==422
     assert client.post('/v1/quality-jobs',json={**payload,'threshold':6}).status_code==422
     assert client.post('/v1/quality-jobs',json=payload).status_code==404

@@ -21,7 +21,7 @@ Status: runs on Windows (Dan's RTX 5080 PC). Linux (Debian) start and install sc
 These stay outside this folder and are never copied between machines:
 
 - Workspace: `<workspace>/work`. The workspace is the nearest folder above this one that has `work/service-env`, so this folder can sit beside the plugin, inside it, or deeper. If none exists yet it is two folders up on Windows and the folder containing this one on Linux. `WTV_WORKSPACE` overrides all of this. The start scripts print the workspace they chose (`service/workspace.py` holds the rule). It holds `service-env` (the service's Python environment), `sidon-env`, `sidon-models`, and by default the data folder.
-- Data folder: `<workspace>/work/wtv-data` (uploads, jobs, stage cache, pairing token, model speed history). `WTV_DATA_DIR` overrides it.
+- Data folder: `<workspace>/work/wtv-data` (uploads, jobs, stage cache, model speed history; a `token.txt` from versions before 0.7.2 is unused). `WTV_DATA_DIR` overrides it.
 - Storage cleanup: anything in the data folder not used for `retention_days` (in `local-config.json`; default 14, the Debian installer sets 7 for the shared machine, 0 = keep everything) is removed at service start and then hourly while no job is running: finished jobs with their results, uploads no remaining job uses, dialogue-cache entries, and crash leftovers older than a day. "Used" means created, reused, downloaded or hit in the cache. Never removed: queued or running jobs and their uploads, uploads being analysed, the pairing token and the speed history. The panel's own copies of results (the project export folder Premiere imports) are outside the service and never touched; a cleaned-up job is simply processed again on rerun. The service window prints one line per cleanup. To see what would go without deleting anything: `python -m service.storage_cleanup` (with the service's Python, from this folder; `--days N` to try another value). Code: `service/storage_cleanup.py`.
 - Fresh jobs: a job submitted with `"fresh": true` (the panel's "Don't use cached files") is never answered with an earlier job and ignores stage-cache hits; its results replace the cached ones. A final job that needs the dialogue pass its own stage job just made still reads it. Advertised as capability `fresh_jobs_v1`. `max_boost_db` and `enhancer_wet` (raw blend) were already settings; the panel now sends both.
 - Configuration: `local-config.json` in this folder. `WTV_CONFIG` overrides it.
@@ -32,7 +32,7 @@ These stay outside this folder and are never copied between machines:
 & '.\start-service.ps1'
 ```
 
-It prints the panel token and listens on `http://127.0.0.1:8756`. In the panel, enter that address and token and click Connect.
+It listens on `http://127.0.0.1:8756` and prints that URL. In the panel, enter it and click Connect; there is no token. To serve other machines on the LAN, set `WTV_HOST` to this PC's LAN IPv4 address before starting.
 
 To create the service environment: make a Python 3.12 virtual environment at `<workspace>\work\service-env` and install `requirements.lock.txt`. The model environments are referenced by `local-config.json`. Rebuild Speech's model is installed by double-clicking `setup-sidon.bat` (needs an NVIDIA GPU).
 
@@ -42,7 +42,19 @@ To create the service environment: make a Python 3.12 virtual environment at `<w
 2. `sudo apt install python3 python3-venv git build-essential`
 3. Copy this folder to the machine, for example to `~/wtv/WTVAudioWizard-Service`. Do not copy `local-config.json` from another machine.
 4. `bash setup-linux.sh`
-5. `bash start-service.sh`
+5. `echo WTV_HOST=<this machine's LAN IPv4, e.g. 192.168.0.176> > service.env` (git-ignored; without it the service listens on 127.0.0.1 only)
+6. `bash start-service.sh` — prints the Service URL to enter in the panel. It runs in the foreground; Ctrl+C stops it. To keep it running after logging out, see "Running it in the background" below.
+
+### Running it in the background (Debian GPU server)
+
+`scripts/service-ctl.sh` keeps the service running after the SSH session ends (no root needed; it uses `setsid`/`nohup`, one process, one worker):
+
+- `bash scripts/service-ctl.sh start` — starts `start-service.sh` in the background, log in `<workspace>/work/service.log`
+- `bash scripts/service-ctl.sh status` — running or not, the listening address, and the last log lines
+- `bash scripts/service-ctl.sh stop` — stops it (finish or cancel running jobs first: queued/running jobs are marked failed on restart)
+- `bash scripts/service-ctl.sh restart`
+
+It does not start again after a reboot; run `start` again.
 
 `setup-linux.sh` creates four Python environments under `<workspace>/work`, clones GAP-URGENet and Bandit v2 at the commits the Windows PC uses, downloads the weights, checks every weight file against its pinned SHA-256 and writes `local-config.json`. It needs internet access to PyPI, download.pytorch.org, GitHub and huggingface.co (the Bandit v2 weights come from the jsoncx/bandit-v2 mirror there, pinned and hash-checked; Zenodo is no longer used), and roughly 30 GB of free disk space. It can be run again; finished steps are skipped.
 
@@ -65,5 +77,5 @@ Two music tests fail on every machine so far (`test_music_peak_guard_stops_clipp
 
 ## Notes
 
-- The service accepts connections from this machine only (bind address and Host check). Office-network access is planned, not built.
+- No pairing token since 0.7.2. The service accepts only loopback and private-LAN (10/8, 172.16/12, 192.168/16) clients, checked on the real socket address (Uvicorn runs with `--no-proxy-headers`) and on the Host header; browser `Origin`s are refused. Anyone on the office LAN can use it. The bind address is `WTV_HOST` / `service.env`, default 127.0.0.1.
 - The stage cache key includes this folder's path, so the first run after moving the folder reprocesses clips once instead of reusing cached model output.
