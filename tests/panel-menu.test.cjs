@@ -29,7 +29,7 @@ test('the menu is registered for the manifest panel id with a no-op show handler
   const panel = h.config().panels.wtvAudioWizard;
   assert.equal(typeof panel.show, 'function');
   assert.equal(typeof panel.invokeMenu, 'function');
-  assert.deepEqual(panel.menuItems.filter(i => i !== '-').map(i => i.label), ['Copy report', 'Open export folder', 'Change export folder…', 'Connection settings', 'Save settings…', 'Load settings…', 'New preset from current settings…', 'Compact panel', "Don't use cached files", 'WTVAudioWizard v9.9.9']);
+  assert.deepEqual(panel.menuItems.filter(i => i !== '-').map(i => i.label), ['Copy report', 'Open export folder', 'Change export folder…', 'Connection settings', 'Save settings…', 'Load settings…', 'New preset from current settings…', 'Compact panel', "Don't use cached files", 'Help: operator guide', 'WTVAudioWizard v9.9.9']);
   assert.equal(panel.menuItems.at(-1).enabled, false);
 });
 

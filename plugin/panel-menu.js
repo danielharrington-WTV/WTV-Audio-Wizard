@@ -4,7 +4,8 @@
 //
 // Safety rule: every menu action also exists as a control in the panel, and
 // the compact layout that hides some of those controls can only be switched
-// on from this menu. If a host never shows the menu, nothing becomes
+// on from this menu. "Help: operator guide" (2026-10-14) is menu-only too; it
+// only opens documentation. If a host never shows the menu, nothing becomes
 // unreachable. Exception: "Don't use cached files" (2026-10-09, Dan's choice)
 // is menu-only; its default (off) is the normal behaviour, and the run log
 // says when it is on.
@@ -28,11 +29,12 @@ function menuItems({version, compact, noCache}) {
     {id: 'compact', label: 'Compact panel', checked: Boolean(compact)},
     {id: 'noCache', label: "Don't use cached files", checked: Boolean(noCache)},
     '-',
+    {id: 'help', label: 'Help: operator guide'},
     {id: 'about', label: `WTVAudioWizard v${version}`, enabled: false},
   ];
 }
 
-// hooks: click(id), toggleConnection(), newPreset(), getCompact(), setCompact(bool), getNoCache(), setNoCache(bool).
+// hooks: click(id), toggleConnection(), newPreset(), openHelp(), getCompact(), setCompact(bool), getNoCache(), setNoCache(bool).
 function createMenu({entrypoints, panelId, version, hooks}) {
   function setChecked(value, id = 'compact') {
     // Runtime menu updates are optional: without them the tick mark is only
@@ -50,6 +52,7 @@ function createMenu({entrypoints, panelId, version, hooks}) {
       setChecked(next, 'noCache');
     } else if (id === 'connectionSettings') hooks.toggleConnection();
     else if (id === 'newPreset' && hooks.newPreset) hooks.newPreset();
+    else if (id === 'help' && hooks.openHelp) hooks.openHelp();
     else if (CLICK_TARGETS.includes(id)) hooks.click(id);
   }
   let installed = false, error = null;

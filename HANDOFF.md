@@ -1,4 +1,9 @@
-# WTVAudioWizard continuation handoff — v0.8.4
+# WTVAudioWizard continuation handoff — v0.8.5
+
+## Latest — Panel 0.8.5: Help opens the operator guide (2026-10-14)
+
+Dan asked to embed the guide in the plugin. Showing it inside the panel was rejected (UXP renders only a subset of HTML/CSS; the guide's tour, layout and scripts would break at ~300 px), so: panel menu **Help: operator guide** (`panel-menu.js` id `help` -> hook `openHelp` -> `main.js` `openGuide`). The guide is bundled at `plugin/help/WTVAudioWizard-Guide.html` (byte-identical copy of `docs/WTVAudioWizard-Guide.html`; `docs/` stays the source and `tests/help-guide.test.cjs` fails if they differ), so it is inside a packaged `.ccx` too. `openGuide` resolves it with `localFileSystem.getPluginFolder().getEntry(...)` and opens it with `uxp.shell.openPath` (default browser); not an `action()`, so it works while busy. Manifest `launchProcess.extensions` is now `["", ".html"]` (was folders only); Premiere asks the user once. Fallback: if opening fails or is denied, the status line gives the file's full path and copies it to the clipboard; if the file is missing, it points to `docs/`. Simulated success / denied / missing outcomes behave as intended. **Not yet tried in Premiere**: whether `shell.openPath` opens an `.html` file in the browser on the Mac; if it does not, the next options are copying the guide to the data folder before opening, or serving it from the GPU service.
+Guide: panel-menu paragraph mentions Help; panel picture re-rendered as v0.8.5. Version 0.8.5 in the six checked places. Tests 424/424.
 
 ## Latest — Panel 0.8.4: default GPU server URL, easier New preset, Select music button (2026-10-13)
 

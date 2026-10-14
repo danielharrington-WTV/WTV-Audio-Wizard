@@ -271,7 +271,7 @@ function reportError(error, actionName) {
   say(lastError.message);
 }
 function diagnosticReport() {
-  const report = ['WTVAudioWizard panel v0.8.4', `Panel menu: ${panelMenuState.installed ? 'installed' : 'not installed (' + panelMenuState.error + ')'} \u00b7 compact ${document.body.classList.contains('compact') ? 'on' : 'off'}`, `Mode: ${$('mode').value}`,
+  const report = ['WTVAudioWizard panel v0.8.5', `Panel menu: ${panelMenuState.installed ? 'installed' : 'not installed (' + panelMenuState.error + ')'} \u00b7 compact ${document.body.classList.contains('compact') ? 'on' : 'off'}`, `Mode: ${$('mode').value}`,
     `Dialogue: ${$('enableEnhancer').checked ? $('enhancer').value : 'raw (no model)'} \u00b7 level ${$('dialoguePostprocess').checked ? 'on' : 'off'} \u00b7 de-ess ${$('deess').checked ? 'on' : 'off'}`,
     `De-click: ${$('deessDeclick').checked}`,
     `Handles: ${$('handlesEnabled').checked ? $('handleSeconds').value + ' s per side (per clip only)' : 'off'}`,
@@ -572,7 +572,7 @@ function setCompact(on) {
 }
 document.body.classList.toggle('compact', optionsUi.compact === true);
 const panelMenuState = panelMenu.createMenu({
-  entrypoints: uxp.entrypoints, panelId: 'wtvAudioWizard', version: '0.8.4',
+  entrypoints: uxp.entrypoints, panelId: 'wtvAudioWizard', version: '0.8.5',
   hooks: {
     click: id => $(id).click(),
     getCompact: () => document.body.classList.contains('compact'),
@@ -582,6 +582,7 @@ const panelMenuState = panelMenu.createMenu({
     // Shows the Connection block (hidden in compact layout while connected) and
     // opens it; choosing it again puts it away.
     newPreset: () => showNewPresetForm(),
+    openHelp: () => { void openGuide(); },
     toggleConnection: () => {
       const show = !document.body.classList.contains('show-connection');
       document.body.classList.toggle('show-connection', show);
@@ -1007,6 +1008,31 @@ async function openDestinationFolder() {
   if (!folder) { await chooseExportFolder(); return; }  // "No folder": choose one instead of failing.
   const result = await uxp.shell.openPath(folder.nativePath, 'Open the WTV export folder in Finder or File Explorer.');
   if (result) throw new Error(result);
+}
+// Help: operator guide (2026-10-14). The guide ships inside the plugin folder
+// (plugin/help/, a copy of docs/WTVAudioWizard-Guide.html kept identical by
+// tests/help-guide.test.cjs), so it is installed with a packaged .ccx too, and
+// opens in the default web browser through the manifest's launchProcess
+// ".html" permission (Premiere asks once). Not an action(): reading help must
+// work while a batch is running. If it cannot open, the status line gives the
+// file's location and copies it, instead of failing silently.
+const GUIDE_PATH = 'help/WTVAudioWizard-Guide.html';
+async function openGuide() {
+  let nativePath = null;
+  try {
+    const folder = await fs.getPluginFolder();
+    const entry = await folder.getEntry(GUIDE_PATH);
+    nativePath = entry.nativePath;
+    const result = await uxp.shell.openPath(nativePath, 'Open the WTVAudioWizard operator guide in your web browser.');
+    if (result) throw new Error(result);
+    say('Opened the operator guide in your web browser.');
+  } catch (error) {
+    const reason = String(error && error.message || error);
+    if (!nativePath) { say(`Couldn't find the operator guide in the plugin folder (${reason}). It is also in the project's docs folder: docs/WTVAudioWizard-Guide.html.`); return; }
+    let copied = false;
+    try { await navigator.clipboard.writeText(nativePath); copied = true; } catch (_) {}
+    say(`Couldn't open the operator guide automatically (${reason}). Open this file in your web browser${copied ? ' (location copied)' : ''}: ${nativePath}`);
+  }
 }
 // Folder picker for the export folder. Starts in the folder already chosen for
 // this project, or the project's own folder when none has been chosen yet.

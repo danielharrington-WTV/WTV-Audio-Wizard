@@ -46,7 +46,7 @@ async function requestLocal(baseUrl, path, options = {}, transport = fetch) {
     });
   } catch (error) {
     if (/manifest entry not found|permission denied to the url/i.test(String(error))) {
-      throw new Error('Network permission is still blocked in panel v0.8.4. Confirm UXP Developer Tool lists version 0.8.4. This build uses the broad network permission workaround; preserve the original UDT error for diagnosis: ' + String(error));
+      throw new Error('Network permission is still blocked in panel v0.8.5. Confirm UXP Developer Tool lists version 0.8.5. This build uses the broad network permission workaround; preserve the original UDT error for diagnosis: ' + String(error));
     }
     throw error;
   }

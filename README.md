@@ -1,4 +1,6 @@
-# WTVAudioWizard — panel 0.8.4, service 0.7.2
+# WTVAudioWizard — panel 0.8.5, service 0.7.2
+
+**Panel 0.8.5 (2026-10-14):** panel menu **Help: operator guide** opens the operator guide in the web browser. The guide ships inside the plugin (`plugin/help/`, a copy of `docs/WTVAudioWizard-Guide.html`; after editing the guide, copy it there too, a test checks they match), so it also works in a packaged plugin. Reload the plugin fully: the manifest gained permission to open `.html` files.
 
 **Panel 0.8.4 (2026-10-13):** the Service URL defaults to the office GPU server, `http://192.168.0.176:8756`, the preset menu ends with **+ New preset…** (also in the panel menu) to save the current settings as your own preset, and a small arrow button left of **Level & duck music** selects the music clips (clip or track name contains the words in Options > Ducking > Select music, default `ANW`). Service unchanged.
 
