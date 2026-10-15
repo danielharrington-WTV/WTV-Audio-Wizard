@@ -46,7 +46,7 @@ def test_lan_boundary_without_token(client):
     c, app = client
     assert 'authorization' not in {k.lower() for k in c.headers}
     health = c.get('/v1/health')
-    assert health.status_code == 200 and health.json()['service_version'] == '0.7.2'
+    assert health.status_code == 200 and health.json()['service_version'] == '0.7.3'
     assert c.get('/v1/defaults').status_code == 200
     assert c.get('/v1/health', headers={'Authorization': 'Bearer anything'}).status_code == 200
     assert not hasattr(app, 'TOKEN') and not hasattr(app, 'auth')

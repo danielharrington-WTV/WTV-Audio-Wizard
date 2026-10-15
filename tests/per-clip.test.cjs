@@ -807,7 +807,7 @@ test('prepare accepts a 30-minute selected clip and rejects longer clips before 
 test('handles extend scratch source only and import with hidden trims, leaving visible cut unchanged', async()=>{
   const {api,original,calls}=setup();
   const raw=original.tracks[0].clips[0]; raw.selected=true;
-  const context=await api.prepare(true,{handlesEnabled:true,handleSeconds:0.5});
+  const context=await api.prepare(true,{handlesEnabled:true,handleFrames:15});
   const c=context.clips[0];
   assert.equal(c.handles.head,0.5); assert.equal(c.handles.tail,0.5);
   assert.equal(c.exportDuration,3); assert.equal(Number(c.mediaInTicks)/254016000000,0.5);
@@ -825,7 +825,7 @@ test('handles extend scratch source only and import with hidden trims, leaving v
 test('handles clamp separately at source and timeline boundaries and skip retimed media', async()=>{
   const {api,original}=setup(); const raw=original.tracks[0].clips[0];
   raw.selected=true; raw.start=0.2; raw.end=2.2; raw.inPoint=57.9;
-  const context=await api.prepare(true,{handlesEnabled:true,handleSeconds:0.5});
+  const context=await api.prepare(true,{handlesEnabled:true,handleFrames:15});
   assert.equal(context.clips[0].handles.head,0.2); assert.equal(context.clips[0].handles.tail,0.1);
   raw.selected=false; original.tracks[0].clips[1].selected=true;
   const retimed=await api.prepare(true,{handlesEnabled:true});
@@ -851,24 +851,25 @@ test('handled exports use fresh scratch clones and cannot discard an unconfirmed
 test('off-grid handles retain frame cover and sample alignment, with separate cache identities',async()=>{
   const env=offGridSetup(); const raw=env.original.tracks[0].clips[0]; raw.inPoint=2;
   raw.source.getMedia=async()=>({getDuration:()=>env.ppro.TickTime.createWithSeconds(1000)});
-  const a=await env.api.prepare(true,{handlesEnabled:true,handleSeconds:0.5});
+  const a=await env.api.prepare(true,{handlesEnabled:true,handleFrames:15});
   const c=a.clips[0], placementStart=Math.floor(Number(c.start.ticks)/FRAME_2997)*FRAME_2997;
   assert.equal(Number(c.exportStartTicks)+Number(c.mediaInTicks),placementStart);
   assert.equal(Number(c.outTicks)%FRAME_2997,0);
   ready(a); await env.api.apply(a);
-  const b=await env.api.prepare(true,{handlesEnabled:true,handleSeconds:1});
+  const b=await env.api.prepare(true,{handlesEnabled:true,handleFrames:30});
   assert.notEqual(c.id,b.clips[0].id);
 });
 
 
-test('handle lengths are floored to whole sequence frames (Premiere snaps trims to frames, live 2026-09-21)',async()=>{
+test('handles are whole sequence frames: 15 frames at 29.97 is exactly 15 frames each side (frames since 2026-10-14)',async()=>{
   const env=offGridSetup(); const raw=env.original.tracks[0].clips[0]; raw.inPoint=2;
   raw.source.getMedia=async()=>({getDuration:()=>env.ppro.TickTime.createWithSeconds(1000)});
-  const c=(await env.api.prepare(true,{handlesEnabled:true,handleSeconds:0.5})).clips[0];
+  const c=(await env.api.prepare(true,{handlesEnabled:true,handleFrames:15})).clips[0];
   const headTicks=Math.round(c.handles.head*254016000000), tailTicks=Math.round(c.handles.tail*254016000000);
   assert.ok(headTicks>0&&tailTicks>0);
   assert.equal(headTicks%FRAME_2997,0); assert.equal(tailTicks%FRAME_2997,0);
-  assert.ok(headTicks<=Math.round(0.5*254016000000)&&headTicks>Math.round(0.5*254016000000)-FRAME_2997);
+  assert.equal(headTicks,15*FRAME_2997); assert.equal(tailTicks,15*FRAME_2997);
+  assert.equal(c.handles.headFrames,15); assert.equal(c.handles.tailFrames,15); assert.equal(c.handles.requestedFrames,15);
 });
 
 
@@ -876,7 +877,7 @@ test('off-grid clips (source span one frame longer than the timeline span) still
   const env=offGridSetup(); const raw=env.original.tracks[0].clips[0]; raw.inPoint=2;
   raw.sourceOut=2+971*FRAME_2997/254016000000;
   raw.source.getMedia=async()=>({getDuration:()=>env.ppro.TickTime.createWithSeconds(1000)});
-  const c=(await env.api.prepare(true,{handlesEnabled:true,handleSeconds:0.5})).clips[0];
+  const c=(await env.api.prepare(true,{handlesEnabled:true,handleFrames:15})).clips[0];
   assert.ok(c.handles.head>0&&c.handles.tail>0,JSON.stringify(c.handles));
   assert.equal(c.handles.reason,undefined);
 });
@@ -896,7 +897,7 @@ test('30-minute cut may export additional handles and off setting preserves old 
  const {api,original,ppro}=setup();const raw=original.tracks[0].clips[0];
  original.tracks[0].clips=[raw];raw.selected=true;raw.start=1;raw.end=1801;raw.inPoint=3;
  raw.source.getMedia=async()=>({getDuration:()=>ppro.TickTime.createWithSeconds(2000)});
- const c=(await api.prepare(true,{handlesEnabled:true})).clips[0];assert.equal(c.exportDuration,1801);
+ const c=(await api.prepare(true,{handlesEnabled:true})).clips[0];assert.equal(c.exportDuration,1802); // default 30 frames = 1 s per side (30 fps assumed here)
  const off=(await api.prepare(true)).clips[0];assert.equal(off.exportDuration,1800);assert.equal(off.handles,undefined);assert.notEqual(off.id,c.id);
 });
 
@@ -920,4 +921,11 @@ test('Auto mute off: a partial lane gets no -96 dB Amplify and no WTV muted name
   assert.equal(target.components.length,0);
   assert.equal(target.disabled,false);
   assert.ok(!(await target.getName()).endsWith('WTV muted'));
+});
+
+test('handle frames must be a whole number from 1 to 300 (2026-10-14)',async()=>{
+ const {api,original}=setup(); original.tracks[0].clips[0].selected=true;
+ for(const handleFrames of [0,301,12.5,NaN]) await assert.rejects(api.prepare(true,{handlesEnabled:true,handleFrames}),/whole number of frames from 1 to 300/);
+ const c=(await api.prepare(true,{handlesEnabled:true,handleFrames:30})).clips[0];
+ assert.equal(c.handles.requestedFrames,30); assert.match(c.id,/-h2-30f-/);
 });

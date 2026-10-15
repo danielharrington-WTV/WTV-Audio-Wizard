@@ -1,7 +1,7 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"></head>
 <body>
-<div class="heading"><span id="headingConnected" class="heading-connected" title="Connected to the service. Panel menu &gt; Connection settings shows the connection row."></span><select id="presetSelect" title="Project-type preset. Each preset keeps its own settings; switch any time. Choose + New preset… to save the current settings as your own preset." aria-label="Project preset"><option value="promo">Promo/Action</option><option value="interview">Interview</option><option value="camcorder">Camcorder</option><option value="natural">Natural (MossFormer)</option><option value="stems">Stem separation</option></select><span class="subtle">v0.8.5</span></div>
+<div class="heading"><span id="headingConnected" class="heading-connected" title="Connected to the service. Panel menu &gt; Connection settings shows the connection row."></span><select id="presetSelect" title="Project-type preset. Each preset keeps its own settings; switch any time. Choose + New preset… to save the current settings as your own preset." aria-label="Project preset"><option value="promo">Promo/Action</option><option value="interview">Interview</option><option value="camcorder">Camcorder</option><option value="natural">Natural (MossFormer)</option><option value="stems">Stem separation</option><option value="youtube">YouTube</option></select><span class="subtle">v0.8.7</span></div>
 <div class="tab-bar" role="tablist" aria-label="Panel sections">
 <div id="tabMainBtn" role="tab" class="tab active" aria-selected="true" aria-controls="tabMain" title="Workflow steps">Main</div>
 <div id="tabOptionsBtn" role="tab" class="tab" aria-selected="false" aria-controls="tabOptions" title="Settings and preferences">Options</div>
@@ -55,6 +55,11 @@
 <div id="checkQuality" role="button" class="step secondary" title="Scan only the selected dialogue audio clips with DNSMOS on the connected service and add red review markers. Requires a service connection; no audio changes.">Check dialogue quality</div>
 </div>
 <p id="qualityResult" class="subtle" role="status" style="display:none"></p>
+<div class="step-row">
+<div id="learnNoise" role="button" class="step secondary" aria-disabled="true" title="Mark In and Out on the sequence around 0.5 to 60 seconds of background noise only (room tone, hum, hiss between lines; no speech, music or effects), then click Learn noise. Renders that range as you hear it and saves its noise print for this project. Nothing on the timeline changes.">Learn noise</div>
+<div id="removeNoise" role="button" class="step restore-speech" aria-disabled="true" title="Select dialogue clips, then click Remove noise. Turns this project's learned noise print down (Options &gt; Clean dialogue &gt; Remove noise). Best for steady noise: hum, hiss, air conditioning, fans. Changing noise (traffic, wind, voices) is left alone. Results go on a new Noise removed track and the originals are muted when Mute raw when done is on (Unmute reverts). Audition before delivery.">Remove noise</div>
+</div>
+<p id="noisePrintStatus" class="subtle" role="status">No noise print for this project. Mark In/Out around noise only, then click Learn noise.</p>
 </div></div>
 </div>
 <div id="tabOptions" class="tab-panel" role="tabpanel" aria-labelledby="tabOptionsBtn" hidden>
@@ -70,16 +75,26 @@
 </div>
 </div>
 <label title="Per clip only. Process extra source audio for later trims and crossfades; visible cuts stay in place. Unavailable handles are reported."><input id="handlesEnabled" type="checkbox" checked> Add clip handles</label>
-<label class="field-row"><span>Seconds per side</span><input id="handleSeconds" type="number" value="0.5" min="0.01" max="2" step="0.1" title="Requested handles on each side, limited by available source media and timeline zero."></label>
+<label class="field-row"><span>Frames per side</span><input id="handleFrames" type="number" value="30" min="1" max="300" step="1" title="Requested handles on each side, in frames of the sequence (default 30), limited by available source media and timeline zero."></label>
 <label class="field-row" title="Blend this much of the original clip back under the cleaned voice, to keep some of the raw mix (energy, room, effects). 0 = model output only. Needs Neural cleanup."><span>Keep raw mix · %</span><input id="rawBlend" type="number" value="0" min="0" max="50" step="5"></label>
+<p class="subtle option-heading">Remove noise</p>
+<label class="field-row" title="How far Remove noise turns the learned noise down. Default 12 dB; above about 18 dB voices can start to sound thin or watery."><span>Noise reduction · dB</span><input id="noiseReduction" type="number" value="12" min="0" max="40" step="1"></label>
+<label class="field-row" title="How far above the learned noise a sound must be to be kept untouched. Default 6 dB. Higher removes more noise but may thin quiet words; lower keeps more of the voice and more noise."><span>Noise threshold · dB</span><input id="noiseThreshold" type="number" value="6" min="-6" max="24" step="1"></label>
 <p id="modeHelp" class="subtle">Select dialogue on separate tracks; leave music unselected.</p>
 </div>
 <div id="toggleLevelsStems" role="button" class="section-toggle nested options-toggle" aria-controls="levelsStemsSection" aria-expanded="false" title="Show or hide stem level targets">+ Levels &amp; stems</div>
 <div id="levelsStemsSection" style="display:none">
 <p id="settingsSource" class="subtle">Factory defaults</p>
-<label class="field-row"><span id="dialogueLabel">Dialogue · dBFS</span><input id="dialogue" type="number" value="-12" min="-70" max="-6"></label>
+<label class="field-row"><span id="dialogueLabel">Dialogue · dBFS</span><input id="dialogue" type="number" value="-12" min="-70" max="-3"></label>
+<label class="field-row" title="Level &amp; compress first brings each clip's speech to this average level, then compresses peaks to the Dialogue level above. Default -23 (broadcast); the YouTube preset uses -16 with Dialogue -4 for about -14 LUFS."><span>Speech level · dBFS</span><input id="speechLevel" type="number" value="-23" min="-40" max="-12" step="1"></label>
+<label title="On (default): Level &amp; compress first brings each clip's speech to Speech level, so quiet and loud takes come out alike. Off: the compressor works on the clip as it is."><input id="levelSpeech" type="checkbox" checked> Level speech before compressing</label>
+<p class="subtle">Dialogue compressor (Level &amp; compress). Defaults are the long-standing settings.</p>
+<label class="field-row" title="How fast the compressor turns loud peaks down. Default 3 ms; slower lets more of each consonant through."><span>Compressor attack · ms</span><input id="compAttack" type="number" value="3" min="0.5" max="50" step="0.5"></label>
+<label class="field-row" title="How fast the compressor lets go after a peak. Default 60 ms; longer is smoother but can dip the next word."><span>Compressor release · ms</span><input id="compRelease" type="number" value="60" min="10" max="1000" step="10"></label>
+<label class="field-row" title="How far below the Dialogue level compression starts, gently. Default 12 dB; 0 is a hard knee."><span>Compressor knee · dB</span><input id="compKnee" type="number" value="12" min="0" max="24" step="1"></label>
+<label class="field-row" title="The most the compressor may turn any moment down. Default 24 dB. A final ceiling still keeps peaks at the Dialogue level."><span>Max reduction · dB</span><input id="compMaxReduction" type="number" value="24" min="0" max="40" step="1"></label>
 <label class="field-row" title="Most Level &amp; compress may raise quiet dialogue. Higher helps distant or quiet talkers; it also raises their background."><span>Max level boost · dB</span><input id="maxBoost" type="number" value="8" min="0" max="24"></label>
-<label class="field-row"><span id="effectsLabel">Ambience · dBFS</span><input id="effects" type="number" value="-18" min="-70" max="-6"></label>
+<label class="field-row"><span id="effectsLabel">Ambience · dBFS</span><input id="effects" type="number" value="-18" min="-70" max="-3"></label>
 <p id="levelHelp" class="subtle"></p>
 <p class="subtle">Extraction creates new stems. Bandit runs only for checked stems.</p>
 <div id="reset" role="button" class="secondary" title="Reset dialogue cleanup and level/stem targets to factory defaults for the current preset only (not other Options, like mode or Process in place, and not the other presets)">Reset targets (this preset)</div>
@@ -93,9 +108,11 @@
 <div class="reference-row"><p id="dialogueReferenceSummary" class="subtle" role="status">Clean dialogue</p><div id="refreshDialogueTracks" role="button" class="secondary" aria-disabled="true" title="Refresh the list of dialogue tracks available to duck music against">Refresh</div></div>
 </div>
 <div id="duckingLevelOptions" style="display:none" aria-hidden="true">
-<label class="field-row"><span id="musicLabel">Music baseline · dBFS</span><input id="music" type="number" value="-28" min="-70" max="-6"></label>
+<label class="field-row"><span id="musicLabel">Music baseline · dBFS</span><input id="music" type="number" value="-28" min="-70" max="-3"></label>
 <label><input id="compressMusicBed" type="checkbox" checked> Compress music bed (peak-only) before normalize</label>
 </div>
+<label class="field-row" title="Level &amp; duck music adds a Premiere Multiband Compressor (Peak control) after Broadcast. It compresses music louder than this. Default -30 dB."><span>Music peak control · dB</span><input id="musicPeakThreshold" type="number" value="-30" min="-60" max="0" step="1"></label>
+<label class="field-row" title="Compression ratio of the music Peak control stage. Default 3:1."><span>Music peak ratio · :1</span><input id="musicPeakRatio" type="number" value="3" min="1" max="30" step="0.5"></label>
 <p class="subtle">Relative duck only: pulls selected music down by Duck dB while dialogue is present. Set music level in the timeline first; this pass does not measure or normalize the bed. Existing Amplify effects on selected music are replaced, including manually added ones.</p>
 <label class="field-row"><span>Duck · dB</span><input id="duck" type="number" value="10" min="0" max="30"></label>
 <label class="field-row"><span>Speech floor · dBFS</span><input id="speechThreshold" type="number" value="-40" min="-60" max="-15"></label>
@@ -109,6 +126,7 @@
 <div id="toggleLoudness" role="button" class="section-toggle nested options-toggle" aria-controls="loudnessSection" aria-expanded="false" title="Show or hide loudness verification settings">+ Loudness verification</div>
 <div id="loudnessSection" style="display:none">
 <p class="subtle">Full audible mix</p>
+<label class="field-row" title="Fills in Target, Tolerance and Flag peaks over. YouTube: -14 LUFS, sample peaks flagged over -2 dBFS to stay under YouTube's usual -1 dBTP true-peak ceiling. Editing those fields makes this Custom."><span>Delivery</span><select id="loudnessDelivery"><option value="broadcast">Broadcast (-24 LUFS)</option><option value="youtube">YouTube (-14 LUFS)</option><option value="custom">Custom</option></select></label>
 <label class="field-row"><span>Target · LUFS</span><input id="loudnessTarget" type="number" min="-70" max="0" value="-24"></label>
 <label class="field-row"><span>Tolerance · LU</span><input id="loudnessTolerance" type="number" min="0" max="10" step="0.1" value="1"></label>
 <label class="field-row"><span>Flag peaks over · dBFS</span><input id="peakFlag" type="number" min="-40" max="0" step="0.1" value="-6"></label>

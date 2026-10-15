@@ -84,4 +84,4 @@ async function run(hooks) {
   return {...result, muted, muteError, autoMute};
 }
 
-module.exports = {run, restoreSettings, sidonProblem, RESTORE_KIND};
+module.exports = {run, restoreSettings, sidonProblem, muteOriginals, RESTORE_KIND};

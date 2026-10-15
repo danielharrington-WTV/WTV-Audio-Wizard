@@ -199,3 +199,4 @@ body.compact.is-connected:not(.show-connection) #connectionBlock { display:none;
 body.compact #copyReport, body.compact #changeFolder { display:none; }
 body.compact #cancel.is-disabled { display:none; }
 body.compact .destination-folder-row .destination-folder-btn { margin-right:0; }
+.option-heading { font-weight: 600; margin: 10px 0 2px; }

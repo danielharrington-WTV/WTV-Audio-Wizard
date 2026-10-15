@@ -1,11 +1,53 @@
-# WTVAudioWizard continuation handoff — v0.8.5
+# WTVAudioWizard continuation handoff — v0.8.7
 
-## Latest — Panel 0.8.5: Help opens the operator guide (2026-10-14)
+## Status at a glance (2026-10-15)
+
+- **GitHub `main`:** panel 0.8.5 / service 0.7.2 (last pushed 2026-10-14). Panel 0.8.6 (handles in frames) and 0.8.7 (YouTube, Delivery, compressor settings, Learn noise / Remove noise, service 0.7.3) are **written in Dan's Windows checkout but not yet committed/pushed**.
+- **GPU server (drclaw, 192.168.0.176):** running service **0.7.2** under `scripts/service-ctl.sh`; its checkout still carries its own copy of the 2026-10-12 commit (`83ac6d1`), so the next update there is `git pull --rebase`, then `bash WTVAudioWizard-Service/scripts/service-ctl.sh restart`.
+- **Order matters:** panel 0.8.7 refuses any service but 0.7.3, so update and restart the server **before** pulling 0.8.7 on the Mac. (Panels up to 0.8.6 need 0.7.2.)
+- **Mac (office, Premiere):** git clone in `~/Documents/Premiere UXP plugins/WTV-Audio-Wizard`, updated with `git pull`; Batch Process Dialogue round trip confirmed 2026-10-13 on 0.8.3. Not yet tried in Premiere: 0.8.4 Select music / New preset, 0.8.5 Help menu (`shell.openPath` on .html), 0.8.6 frame handles, 0.8.7 YouTube preset, Delivery, compressor settings and Learn noise / Remove noise (in particular: does `sequence.getInPoint()/getOutPoint()` return the In/Out marks, and does `exportFull:false` on the user's own sequence render exactly that range).
+- **Open questions for Dan:** full-mix loudness of the YouTube preset with timeline music (music level is set only by Level & duck music's Broadcast/Peak control compressors; Music baseline and Compress music bed are hidden and unused); whether to expose Broadcast output gain; whether to drop the 127.0.0.1 mention from user-facing tooltip/guide.
+
+## Latest — Learn noise / Remove noise, in panel 0.8.7 / service 0.7.3 (2026-10-15)
+
+Dan: "can we build in a learn noise floor/remove noise feature?" His choices: learn from the **timeline In/Out range**, a **standalone Remove noise button**, the noise print kept **per project**. Folded into the not-yet-pushed 0.8.7 / 0.7.3 (no version bump); a 0.7.3 service without it is caught by the panel (`noise_profile_v1` capability / `denoise_profile_id` in `/v1/defaults`).
+- Service `service/denoise.py` (CPU DSP, no model): `learn_profile(x, rate)` = mean power per STFT bin (n_fft 2048, hop 512, Hann, channels averaged) as dB, plus seconds, noise RMS dBFS, variation. `remove_noise(x, rate, profile, reduction_db=12, threshold_db=6)` = spectral gate: keep-mask from the bin level vs (noise + threshold) with a 6 dB soft edge, smoothed over 3 bins x 5 frames, stereo-linked; gain floor 10^(-reduction/20); reduction 0 = exact bypass; a profile from another sample rate is read by frequency (`np.interp`). Removes steady noise (hum, hiss, HVAC, fans); leaves changing noise alone.
+- `POST /v1/noise-profile {asset_id}` -> `{profile_id, summary}`; the print is stored as `<data>/noise-profiles/<id>.json` (~30 KB, kept until deleted by hand; storage cleanup ignores the folder, tested). 422 for under 0.5 s or over 120 s. `Settings.denoise_profile_id` (None/32 hex), `denoise_reduction_db` (12, 0–40), `denoise_threshold_db` (6, −6..24); only with `enhancer 'none'`, no stem separation, `separator bandit_v2`. Applied in `run_job` right after the dialogue stem is read, before everything else; report `denoise`. Unknown print -> 404 at submit ("Learn noise again"). `denoise.py` is in `DSP_CODE_SHA256`, so earlier job results are not reused after the update. `/v1/health` capability `noise_profile_v1`. Tests `tests/test_denoise.py` (8: ~12 dB noise drop with a tone unchanged, bypass/reconstruction, mono and 44.1 kHz, validation, end-to-end learn + job, unknown print/short sample).
+- Panel: `learn-noise.js` reads the active sequence's In/Out (`getInPoint/getOutPoint`, must be 0.5–60 s), renders it with `exportSequenceWithRenderWait(exportFull:false)` to a temp WAV (sequence rate/channels; length must match the range within 0.1 s), uploads, calls `/v1/noise-profile`, deletes the upload and temp file; refuses a render at or below −90 dBFS (silence). `noise-prints.js` keeps `{profileId, serviceUrl, summary, at}` per project key (same keys as project folders) in localStorage `wtv-noise-prints-v1`, newest 40; an unsaved project keeps its print in memory. `remove-noise.js` = Rebuild Speech's pattern: `extract.run` with `NOISE_KIND` (dialogue stem, track "Noise removed", clip suffix " · Denoised"), settings with no neural cleanup / level / de-ess plus the denoise fields, then mutes originals per Mute raw when done (`restore-speech.js` now exports `muteOriginals`). UI: Main tab row **Learn noise** / **Remove noise** under Rebuild Speech, with a status line ("Noise print: 2.0 s, −52 dBFS, learned …"); Options > Clean dialogue > **Noise reduction · dB** (12) and **Noise threshold · dB** (6), portable per-preset settings (`noiseReduction`, `noiseThreshold`). `/v1/noise-profile` added to the `local-api.js` allowlist. Copy report line "Noise:".
+- Tests: panel `tests/noise.test.cjs` (6) + updated field lists; 439/439. Service 207 pass + the 2 known music failures. Guide: panel picture re-rendered (now 468x632, two new hotspots), Extras card, Clean dialogue settings row, a troubleshooting entry. Not tried on real program audio (Dan's Zeiss clip was no longer in the session) or in Premiere.
+- Caveats for Dan: the range renders the audible mix, so other tracks playing there end up in the print; prints live on the service that learned them (switching Service URL means learning again); too much reduction sounds thin or watery.
+
+## Panel 0.8.7 / service 0.7.3: YouTube preset, Delivery targets and compressor settings (2026-10-15)
+
+Dan: "a YouTube setting that fits YouTube's current recommendation"; chose both a Verify-loudness target and a preset, at -14 LUFS.
+Research (2026-10-15): YouTube publishes no LUFS spec; its player normalizes to about -14 LUFS integrated (Stats for nerds "content loudness"), turning louder uploads down and never turning quieter ones up. Common practice: -14 LUFS, true peak <= -1 dBTP (some dialogue-led guidance uses -16). Sources: productionadvice.co.uk/stats-for-nerds, josephnilo.com dialogue-loudness article (Aug 2026).
+- `plugin/delivery.js`: Broadcast (-24 LUFS, ±1, sample peaks flagged over -6, the old defaults) and YouTube (-14, ±1, flag over -2 dBFS: Verify loudness measures sample peak and dialogue true peaks ran ~1.4 dB higher in testing, so -2 keeps clear of -1 dBTP). Options > Loudness verification > **Delivery** select (`loudnessDelivery`, portable setting; older files derive it from their three loudness values, else Custom). Picking fills Target/Tolerance/Flag; editing those sets Custom.
+- **Speech level** (`speechLevel`, Options > Levels & stems, -40..-12, default -23) is now sent as `dialogue_level_dbfs` (the leveler target; was fixed at the service default -23). Dialogue/music/ambience targets now go up to -3 dBFS (panel fields, settings-file ranges, service `Stem.target le=-3`, was -6).
+- **YouTube preset** (built-in, last in the list): dialogue -4, speechLevel -16, music -20, effects -10, Delivery YouTube. Calibration with the service's own leveler + compressor + sparse pass (cloud venv) on Dan's raw interview clip Zeiss_V3_Roughcut_v1.wav (7.6 s, -30.5 LUFS raw): -16/-4 -> -14.1 LUFS, -2.6 dBTP; defaults -23/-12 -> -22.0 LUFS. Rule of thumb: dialogue LUFS ≈ dialogue peak target - 10. Music/ambience targets were moved up by the same 8 dB, but they only apply to service-extracted stems: timeline music is levelled by Level & duck music (Broadcast at -12 dB output gain + Peak control), which does not read the Music baseline. Full-mix loudness with music not measured — check with Verify loudness.
+- Service 0.7.3 (schema range + version only); panel requires 0.7.3 exactly, so **the GPU server must be updated and restarted** before the panel. New `tests/test_youtube_loudness.py` (synthetic speech: -15.4 LUFS, -4.0 dBTP; window -15.5..-12.5). Service tests 196 pass, 2 known music failures. Panel tests 430/430 (`tests/delivery.test.cjs` new).
+- Guide (presets, Levels & stems, Loudness verification, Verify loudness card), README updated; guide picture re-rendered.
+- **Compressor settings exposed (same release, Dan's request):** service `Settings.compressor_attack_ms` (3, 0.5–50), `compressor_release_ms` (60, 10–1000), `compressor_knee_db` (12, 0–24), `compressor_max_reduction_db` (24, 0–40), passed from `app.py` to `compress_dialogue()`. Bug fixed: `compress_dialogue()` had accepted attack/release/knee but `_apply_peak_curve()` used the module constants; now passed through. With defaults the output is bit-identical to the previous code (checked against the 93c4b92 compressor). `tests/test_compressor_settings.py`. Panel fields (Options > Levels & stems): `levelSpeech` -> `level_dialogue`, `compAttack`, `compRelease`, `compKnee`, `compMaxReduction` (sent only when the service reports the fields; disabled when Level & compress is off). Music: `normalize-music.js` `makePeakPreset({thresholdDb, ratio})` (normalized threshold (db+60)/60, ratio (r-1)/29; defaults still write the captured values) and `run({peak})`; panel `musicPeakThreshold` (-30, -60..0) and `musicPeakRatio` (3, 1..30) in Options > Ducking. All portable per-preset settings with defaults for older files. Panel tests 433/433; service 199 pass + the 2 known music failures. Guide settings reference updated.
+- Found while doing this: the `duckingLevelOptions` block (Music baseline, Compress music bed) is permanently hidden (`display:none`, nothing shows it) and Level & duck music reads neither value — `music-bed-compress.js` is not wired into the music pass. So timeline music level is set only by the two Premiere compressors. The new music peak fields were placed outside that block (test in `tests/delivery.test.cjs`). Candidate follow-up if Dan wants music level control for YouTube: expose Broadcast's Output Gain (-12 dB) or wire Music baseline.
+
+## Panel 0.8.6: clip handles in frames, default 30 (2026-10-14)
+
+Dan: "change clip handles to be frames instead of seconds, default to 30 frames". Panel only (service unchanged, 0.7.2).
+- Field `handleSeconds` (0.01–2 s) replaced by `handleFrames` ("Frames per side", whole number 1–300, default 30) in `index.html`, `settings-file.js` (integer check via `INTEGER_FIELDS`), `main.js` defaults/labels/report, `per-clip.js`.
+- `per-clip.js` `prepare({handleFrames})` -> `addHandles(clip, frames, frameTicks)`: requested = frames x sequence frame ticks (`sequenceFrameTicks`), or 30 fps (`FALLBACK_FRAME_TICKS`) when Premiere reports no frame rate; still clamped to source media and timeline zero and floored to whole frames. `clip.handles` is now `version: 2` with `requestedFrames`, `headFrames`, `tailFrames` (plus `head`/`tail` seconds as before). Clip ids use `-h2-<frames>f-`, so handled clips export once more under new names; cached results under the old names are not reused.
+- Status line: "handles N frames before / M after (x s / y s)". Copy report: "Handles: 30 frames per side".
+- Migration: `wtv-preset-defaults-revision` 3 removes `handleSeconds` and sets `handleFrames` 30 in every saved preset (revision-2 panels keep everything else). Settings files with only `handleSeconds` load with 30 frames.
+- Tests 426/426 (new: frame validation, exact 15-frame handles at 29.97, revision-3 migration, settings integer check). Guide, README updated; guide picture re-rendered (v0.8.6). Not yet tried in Premiere.
+
+Compression as of this version (reviewed for Dan, no change made; he may want more exposed):
+- Dialogue (service, Level & compress on): per-clip static leveling first (`leveler.py`: active-speech RMS to -23 dBFS, ±30 dB, 30 dB relative gate; not exposed). Then `compressor.py` dialogue-multiband-peak-v4: 80 Hz high-pass; body 150 Hz–4 kHz and air bands; peak-driven gain curve toward the Dialogue target (exposed, default -12 dBFS peak ceiling) with a 12 dB soft knee below it, up to `max_boost_db` lift on the body (exposed as Max level boost, default 8 dB; air band gets at most a quarter, max 2 dB), max 24 dB reduction, 3 ms attack / 60 ms release, body driven by max(peak, RMS+3 dB); hard ceiling at the target. Sparse-whisper pass afterwards when peak-to-RMS gap ≥ 18 dB. Note: `compress_dialogue()` takes attack_ms/release_ms/knee_width_db parameters but they are not passed through to the gain smoothing or knee (module constants are used) — fix that before exposing them.
+- Music (panel, Level & duck music): Premiere's Multiband Compressor "Broadcast" preset (output gain -12 dB), then a "Peak control" multiband at -30 dB threshold, 3:1, 0 dB output; optional "Compress music bed (peak-only)" merged into the duck envelope: 3:1 above (music baseline - 10 dB), max 12 dB reduction, 20 ms blocks.
+
+## Panel 0.8.5: Help opens the operator guide (2026-10-14)
 
 Dan asked to embed the guide in the plugin. Showing it inside the panel was rejected (UXP renders only a subset of HTML/CSS; the guide's tour, layout and scripts would break at ~300 px), so: panel menu **Help: operator guide** (`panel-menu.js` id `help` -> hook `openHelp` -> `main.js` `openGuide`). The guide is bundled at `plugin/help/WTVAudioWizard-Guide.html` (byte-identical copy of `docs/WTVAudioWizard-Guide.html`; `docs/` stays the source and `tests/help-guide.test.cjs` fails if they differ), so it is inside a packaged `.ccx` too. `openGuide` resolves it with `localFileSystem.getPluginFolder().getEntry(...)` and opens it with `uxp.shell.openPath` (default browser); not an `action()`, so it works while busy. Manifest `launchProcess.extensions` is now `["", ".html"]` (was folders only); Premiere asks the user once. Fallback: if opening fails or is denied, the status line gives the file's full path and copies it to the clipboard; if the file is missing, it points to `docs/`. Simulated success / denied / missing outcomes behave as intended. **Not yet tried in Premiere**: whether `shell.openPath` opens an `.html` file in the browser on the Mac; if it does not, the next options are copying the guide to the data folder before opening, or serving it from the GPU service.
 Guide: panel-menu paragraph mentions Help; panel picture re-rendered as v0.8.5. Version 0.8.5 in the six checked places. Tests 424/424.
 
-## Latest — Panel 0.8.4: default GPU server URL, easier New preset, Select music button (2026-10-13)
+## Panel 0.8.4: default GPU server URL, easier New preset, Select music button (2026-10-13)
 
 Dan's requests, panel only (service unchanged at 0.7.2; no server restart needed):
 - **Default Service URL** is now `http://192.168.0.176:8756` (`plugin/index.html`), with the tooltip pointing to `http://127.0.0.1:8756` for a service on the same computer. A URL that has connected before (localStorage `wtv-service-url`) still takes precedence, so an existing Mac install looks the same.
@@ -34,7 +76,7 @@ Mac (Premiere host, 192.168.25.252): moving from hand-copied zips to a git clone
 
 Verified 2026-10-13 (entry above): panel 0.8.3 on the Mac connected to `http://192.168.0.176:8756` and a Batch Process Dialogue round trip worked. Still to check: Service URL kept after reload, and the other service actions. If Premiere reports "Network request failed" while curl works, read `work/service.log` on the server: no request logged points to macOS Local Network permission for Premiere/UXP; a logged request shows the Host/Origin and status to diagnose. Not done: start at boot (systemd needs sudo).
 
-## Latest — Token-free LAN connection: panel 0.8.3, service 0.7.2 (2026-10-12)
+## Token-free LAN connection: panel 0.8.3, service 0.7.2 (2026-10-12)
 
 Dan asked to remove the pairing token so the Premiere panel on the Mac (192.168.25.252) can use the Debian GPU service at `http://192.168.0.176:8756`. Anyone on the office LAN can now submit jobs; that is the intended deployment.
 
@@ -45,7 +87,7 @@ Tests: JS `tests/local-api.test.cjs` (LAN URLs accepted; 30 malformed/public URL
 Validation (cloud container, Python 3.13 with requirements.lock.txt, Node 22): `node --test tests/*.test.cjs` 412/412 pass (baseline 409). Service `pytest tests` 194 pass, 6 skipped, 2 fail — the same two known music failures as the unmodified 93c4b92 (`test_music_peak_guard_stops_clipping_without_rendering_new_media`, `test_music_analysis_and_temporary_asset_cleanup`, identical assertions). Real Uvicorn via `start-service.sh` + `service.env`: `/v1/health` 200 with no token, `/v1/defaults` 200, browser Origin 403, foreign Host 403; `service-ctl.sh` start/status/restart/stop worked. Server deployment and Premiere-on-Mac results: see the entry above.
 
 
-## Latest — Debian installer: Bandit v2 weights from Hugging Face instead of Zenodo (2026-10-09)
+## Debian installer: Bandit v2 weights from Hugging Face instead of Zenodo (2026-10-09)
 
 Dan's check from the office PC: `curl.exe -I -L --max-time 20 "https://zenodo.org/records/12701995/files/checkpoint-multi.ckpt?download=1"` timed out with 0 bytes. He pointed to https://huggingface.co/jsoncx/bandit-v2.
 
@@ -53,11 +95,11 @@ Verified through the Hugging Face API (2026-10-09): the repo is public and not g
 
 Change (`scripts/setup_linux.py`): `BANDIT_REVISION` = that commit; `BANDIT_URL = https://huggingface.co/jsoncx/bandit-v2/resolve/<revision>/checkpoint-multi.ckpt`. The download is still checked against the pinned SHA-256; `--from-dir` still accepts `bandit-v2-multi.ckpt` or `checkpoint-multi.ckpt`. Zenodo is no longer used. Service README's network list updated (PyPI, download.pytorch.org, GitHub, huggingface.co). New test in `tests/test_setup_linux.py` (10 pass); `--plan --only bandit_v2` shows the new URL. Not yet downloaded on the Debian machine.
 
-## Latest — Token field plain text again (2026-10-09)
+## Token field plain text again (2026-10-09)
 
 The preset/no-cache save (same day) was built from an older working copy of `plugin/index.html` and put the Token field back to `type="password"`, undoing the earlier change. Restored `type="text" spellcheck="false"`. Nothing else in that file regressed (checked line by line: the other differences are the new Keep raw mix and Max level boost fields and the handles checkbox). New test in `tests/panel-help.test.cjs` locks the plain-text token in.
 
-## Latest — Presets retuned, handles on by default, Don't use cached files (2026-10-09)
+## Presets retuned, handles on by default, Don't use cached files (2026-10-09)
 
 Dan: the silent export came from a muted whole track or a soloed other track. Note for the record: the panel does read track mute (`AudioTrack.isMuted()`, per-clip.js `inventory`) and unmutes the target track in its render copy; it skips muted tracks when Selected clips only is off. Solo is not read; it is not known whether the UXP API exposes it. Either way the silence check (entry below) now stops such exports.
 
@@ -77,7 +119,7 @@ Tests: JS 408/408 (new `tests/preset-tuning.test.cjs`: handles on, the three pre
 
 Not checked in Premiere or by ear. Risk to listen for: GAP-URGENet rebuilds the voice through a vocoder, so blending 15% raw under it may sound phasey or doubled; MossFormer2 (mask-based) should blend cleanly. If Promo sounds phasey, try Natural with 15% raw for comparison.
 
-## Latest — Silent exports are not kept or sent to the service (2026-10-09)
+## Silent exports are not kept or sent to the service (2026-10-09)
 
 Dan ran Batch Process Dialogue with a track muted by mistake; the results were silent, and reruns stayed silent after unmuting. Cause: the clip's export (`<clip id>-input.wav`) was digital silence, and reuse only checks length and format, so the silent export (and the processed result made from it) was reused on every run. How the mute got into the first export is not known: per-clip export unmutes an explicitly selected clip's track in the render, so it may have been a clip-level mute, a "WTV muted" Amplify, a submix or Full sequence mode. A Copy report from such a run would tell.
 
@@ -88,7 +130,7 @@ Dan asked: check every new export for silence; if digital silence (peak below ab
 - Tests: new `tests/silence.test.cjs` (5: zero files in 16/24-bit PCM and 32-bit float, -95 dBFS silent vs -60 dBFS room tone, early stop and late-only sound, cancel, source checks of the three call sites); `clip-batch.test.cjs` +1 (fresh export skips result reuse). JS tests 401/401.
 - Not checked in Premiere. To test: mute a dialogue track, run on a selected clip from it, expect the silent-clip message; unmute and click again, expect a fresh export and a real result.
 
-## Latest — Service storage cleanup built: 14 days local, 7 on the shared machine (2026-10-09)
+## Service storage cleanup built: 14 days local, 7 on the shared machine (2026-10-09)
 
 Dan chose 14 days on his PC and 7 on the shared machine; no size cap. Built as planned in the entry below, with one firm rule from Dan: the panel's result files are never deleted. They live in the project export folder, which the service never sees; nothing in the cleanup takes a path from the panel.
 
@@ -106,7 +148,7 @@ README: "Current state" updated (cleanup, Premiere checks done, service path now
 
 To use: restart the service. The first start prints a cleanup line (nothing to remove yet, since `wtv-data` was recreated). Not yet run on Dan's PC or on Linux.
 
-## Latest — Premiere checks confirmed; folder check; service storage cleanup planned (2026-10-09)
+## Premiere checks confirmed; folder check; service storage cleanup planned (2026-10-09)
 
 Dan confirmed in Premiere (2026-10-09) that everything listed as unverified works: plain-text token field; panel menu and compact layout (first use of `entrypoints.setup`); interleaved batch (export not slowed, Cancel during export, time saved); v0.8.2 heading, Batch Process Dialogue / Batch Process Options labels, Stem separation preset; export folder per project, kept-files subfolder, Full sequence without prompts, folder choice surviving a restart; the 2026-10-02 list (Rebuild Speech end to end, Processing menu, Mute raw when done, hidden captions, smooth progress); Unmute, Select muted and the -96 dB raw Amplify. Button names stay as they are (the 2026-10-01 naming suggestions are closed).
 
@@ -132,11 +174,11 @@ Plan (built the same day, see the entry above): age-based cleanup of the service
 - Tests: fake clock and temp data folder covering each rule, the never-delete list, the dry run, and a job submitted during cleanup.
 - Waiting on Dan: retention days, whether to add the size cap, and go-ahead to build.
 
-## Latest — Token shown in plain text in the connection menu (2026-10-09)
+## Token shown in plain text in the connection menu (2026-10-09)
 
 Dan asked for the token not to be hidden: the Token field in the connection block (`plugin/index.html`, `#token`) is now `type="text"` (with `spellcheck="false"`) instead of `type="password"`, so it can be read and checked after pasting. No other change; the token is still stored and sent as before.
 
-## Latest — Service finds its workspace from the new location (2026-10-08)
+## Service finds its workspace from the new location (2026-10-08)
 
 Dan moved `WTVAudioWizard-Service` inside `WTVAudioWizard` and asked for the defaults to work from there.
 
@@ -148,7 +190,7 @@ Change (no change in behaviour on Dan's PC today; it now holds wherever the fold
 - On Dan's PC the nearest match is `outputs` (`outputs\work\service-env`), i.e. what is in use now; the token stays the same.
 - Tests: new `tests/test_workspace.py` (beside/inside/nearest-wins/explicit/fallbacks, and the Linux start script run for real). The PowerShell search was run under PowerShell 7.4 on Linux in three layouts (workspace two levels up, nearer workspace wins, none found = clear error). Service tests 167 pass, 6 skip, the same two music failures.
 
-## Latest — SAM Audio rejected; SAM-Test to be removed (2026-10-08)
+## SAM Audio rejected; SAM-Test to be removed (2026-10-08)
 
 Verdict (Dan, after listening to run 20261008-150737): all SAM Audio variants count as failures. Bandit v2 separates dialogue, music and ambience just as well and much faster, so SAM Audio will not be integrated and there is no `separator` choice for it. The Stem separation preset stays as built (Bandit v2 for music and ambience, GAP-URGENet for dialogue).
 
@@ -161,7 +203,7 @@ Cleanup: Dan asked for everything SAM-related to be deleted. This session has no
 - After `SAM-Test` is gone, the three SAM lines in `.gitignore` (comment plus `SAM-Test/.venv/` and `SAM-Test/SAM results/`) can be removed; keep them until the folder is deleted so the `.venv` cannot be committed by accident.
 The SAM-Test entries below are kept as history.
 
-## Latest — SAM-Test third run: four variants separated; quality variant made opt-in (2026-10-08)
+## SAM-Test third run: four variants separated; quality variant made opt-in (2026-10-08)
 
 Run 20261008-150737 on the RTX 5080 (results in `Desktop\Sam test\SAM results\20261008-150737`, not yet listened to). Times are for the 109 s stereo promo (both channels processed), bfloat16, 25 s windows:
 
@@ -176,11 +218,11 @@ Chained stems add back to the mix only to about -9 dB: SAM re-synthesises both t
 
 Dan saw the 16 GB card "completely saturated". Not a leak (one model at a time): large reserves 12.4 GiB plus the CUDA context, and the quality variant loaded 12.1 GiB of weights (reranker with judge and CLAP, span predictor) before any audio, then failed on its first call with `RuntimeError: expected scalar type Float but found BFloat16` (no traceback was kept). Changes: quality is opt-in (`--variants large-chained-quality`), uses 4 candidates (`--candidates`) and 10 s windows, and runs the reranker and span predictor in float32 with autocast off (`fp32_island`) while the main model stays bfloat16; failures now record the traceback; every load prints and reports weights per model part. The launcher now stops with a message only when the quality variant is asked for without judge access. The transformers "MISSING ... newly initialized" notice appeared while the quality parts loaded; check it if quality is ever pursued. For the RTX 3060 12 GB server: base fits; large needs `--window 15` or `10`. 11 kit tests pass. The quality path is untested on a GPU.
 
-## Latest — SAM-Test first run: loader fixed for huggingface_hub 1.x (2026-10-08)
+## SAM-Test first run: loader fixed for huggingface_hub 1.x (2026-10-08)
 
 Dan signed in to Hugging Face himself (browser login) and ran the kit on the RTX 5080: the install worked, the 109 s stereo 48 kHz promo loaded, and every variant failed with `TypeError: BaseModel._from_pretrained() missing 2 required keyword-only arguments: 'proxies' and 'resume_download'`. Cause: the dependency set resolves huggingface_hub 1.x (1.33.0 with transformers 5.19.0), which no longer passes or accepts those two arguments; sam_audio's `BaseModel._from_pretrained` still requires them. Fix in `separate.py` only (`hub_compat()`, called before loading): replaces that loader with one doing the same steps (snapshot download, config.json, build, checkpoint.pt) using only arguments every hub version accepts; covers the judge model too. Tested in the sandbox against huggingface_hub 1.33.0 (reproduces the error unpatched, loads patched) and 0.36.0; 8 kit tests pass. No reinstall needed: the venv is kept, rerun `run_sam_test.bat`. The "No module named 'triton'" line from xformers and the pynvml deprecation notice are harmless on Windows. Second run (14:48): loader fix worked, but every variant then failed with `ValueError: torchcodec.__spec__ is None`. torchcodec 0.7.0 cannot load on Dan's PC (no FFmpeg 4-7 shared DLLs), so the kit's stand-in modules were used, and transformers 5.x probes `importlib.util.find_spec('torchcodec')`, which rejects a module without a spec. Fixed: the stand-ins now carry a proper module spec; also fixed the stand-in's own error message (it referenced a cleared exception variable). New test covers both; 9 kit tests pass. The kit never decodes through torchcodec (audio goes in as tensors), so FFmpeg is not needed.
 
-## Latest — SAM-Test kit built (2026-10-08)
+## SAM-Test kit built (2026-10-08)
 
 New folder `SAM-Test/` (code only; `.venv/` and `SAM results/` are git-ignored). Standalone: no plugin or service change.
 
@@ -191,7 +233,7 @@ New folder `SAM-Test/` (code only; `.venv/` and `SAM results/` are git-ignored).
 - Dan pasted his Hugging Face token into the chat on 2026-10-08. Claude did not use or store it. Advised Dan to enter it himself at the prompt and to revoke and replace it on huggingface.co since it is now in the chat history.
 - Also noted at the time: the service folder had moved inside `WTVAudioWizard`, with a warning that the service would no longer start. That warning was wrong; see the workspace entry above.
 
-## Latest — Stem separation preset; SAM Audio test planned (2026-10-08)
+## Stem separation preset; SAM Audio test planned (2026-10-08)
 
 Preset (done):
 - New built-in preset **Stem separation** (`id:'stems'`) at the end of `PRESETS` in `main.js`, also in the static `<select>` in `index.html`. Defaults: factory settings plus `ambienceStem:true, musicStem:true`. Like the other built-ins it remembers its own edits and Reset returns to these defaults.
@@ -206,7 +248,7 @@ SAM Audio test (planned, nothing built, Dan asked for a plan):
 - Measured per run: time, peak VRAM, sample length and lag against the source, how far the three stems sum from the original, loudness per stem. Dan judges by ear: words in the music/ambience stems, music or effects left in dialogue, artefacts, and whether the promo's hits and risers end up in music or effects.
 - Deliverable: a standalone test folder (like GPU-Test) with its own Python environment, a one-click launcher, results as `<variant>/dialogue.wav, music.wav, ambience.wav` plus `report.json`, and a listening checklist. Integration into the service (a `separator` choice beside `bandit_v2`) only if SAM wins.
 
-## Latest — Interleaved batch: jobs start during export (2026-10-07)
+## Interleaved batch: jobs start during export (2026-10-07)
 
 Dan: "change the way batch processing works so it exports then sends to the connected service, interleaving for faster processing." Panel only; the service is unchanged and needs no restart. Still panel 0.8.2.
 
@@ -232,7 +274,7 @@ Tests: new `tests/prefetch.test.cjs` (13 tests, including a stand-in service wit
 
 NOT verified in Premiere. Things to watch on the first real batch: that export is not slowed by uploads running alongside it, that Cancel during export leaves no jobs running on the service, and the time saved (the timing line at the end of the run shows prepare and process seconds). For the planned shared GPU machine this matters more: with several users the 8-job service limit is shared, so `maxActive` should drop or become per-user when the multi-user queue is built.
 
-## Latest — Panel menu and compact layout (2026-10-06)
+## Panel menu and compact layout (2026-10-06)
 
 Dan confirmed tooltips show in Premiere, and asked to use the panel (tab) menu more to make the panel compact. Still panel 0.8.2.
 
@@ -249,7 +291,7 @@ Dan confirmed tooltips show in Premiere, and asked to use the panel (tab) menu m
 
 Dan: might be useful for Check dialogue quality and Verify loudness; note it for now. Today both report as text plus sequence markers (red review markers for quality, "WTV peak …" markers for loudness). The idea is a list in the panel where clicking an entry moves the playhead to that spot, and for quality also selects the flagged clip. The pieces exist: `premiere.js` already builds a `TrackItemSelection` for Select muted (must be used inside its callback, see UXP-QUIRKS section 4), and marker times are known when the markers are written. Open points: whether Premiere UXP lets a panel set the playhead position on this build (not yet used anywhere in the plugin), where the list goes without undoing the compact layout (probably a collapsible block that appears only after a run), and how long the list may get on a long sequence.
 
-## Latest — Processing menu renamed Batch Process Options (2026-10-06)
+## Processing menu renamed Batch Process Options (2026-10-06)
 
 Dan asked for the collapsible menu under Batch Process Dialogue to read **Batch Process Options** instead of Processing. Text only.
 
@@ -258,7 +300,7 @@ Dan asked for the collapsible menu under Batch Process Dialogue to read **Batch 
 - Unchanged: ids `toggleProcessing`, `processingSection`, `processingSummary`, `processingWarning`; the saved `processing` open/closed preference; `PROCESSING_STEP_IDS` and function names. The Options tab is still called Options.
 - Guide callout renamed (picture re-rendered), README table updated. JS tests 375/375; label fits one line at 240 px in headless Chromium. Not checked in Premiere. Still panel 0.8.2.
 
-## Latest — Panel version 0.8.2 (2026-10-06)
+## Panel version 0.8.2 (2026-10-06)
 
 Dan asked for the version to become 0.8.2. Panel only; the service stays 0.7.1.
 
@@ -269,7 +311,7 @@ Dan asked for the version to become 0.8.2. Panel only; the service stays 0.7.1.
 - Guide (`docs/`), `panel-preview.png` and README updated to 0.8.2.
 - To pick it up: reload the plugin in UXP Developer Tool (it should list 0.8.2 and the panel heading should read v0.8.2). No service restart is needed for the version change. Not checked in Premiere.
 
-## Latest — Clean Dialogue button renamed Batch Process Dialogue (2026-10-06)
+## Clean Dialogue button renamed Batch Process Dialogue (2026-10-06)
 
 Dan asked for the Main-tab button to be called **Batch Process Dialogue**. Text only; no behaviour changed.
 
@@ -278,7 +320,7 @@ Dan asked for the Main-tab button to be called **Batch Process Dialogue**. Text 
 - Guide and `panel-preview.png` re-rendered with the new label; README "Current state" table updated. Older HANDOFF and README entries keep "Clean Dialogue".
 - JS tests 372/372. The longer labels fit on one line at 240 px in headless Chromium. Not checked in Premiere.
 
-## Latest — Documentation brought up to date (2026-10-05)
+## Documentation brought up to date (2026-10-05)
 
 - `README.md`: new "Current state (2026-10-05)" section at the top (what lives in this folder, the service's new folder and start command, a table of current and former button names, export folder behaviour, the shared-GPU plan in one paragraph, what is still unchecked in Premiere). Title now "panel 0.8.1, service 0.7.1". Start command, Files and configuration, Validation and the Sidon paragraph point at `..\WTVAudioWizard-Service`. The Fix a pop section is renamed Fix pop at playhead and corrected: it runs in the panel (`plugin/local-dsp.js`), not through `/v1/deplosive`, and saves into the `WTVAudioWizard` output folder. The dated history sections below were left as written; they use the names of their time.
 - `docs/WTVAudioWizard-Guide.html` and `docs/panel-preview.png`: panel picture re-rendered from the current panel files (468x600, export folder row with Change); 19 callouts (new "Change", rewritten "Export folder"); new help entry "Where are my files saved?"; dates set to 5 October 2026. Checked in headless Chromium at desktop and phone widths: 19 hotspots, no console errors, no external requests, no horizontal overflow.
@@ -286,7 +328,7 @@ Dan asked for the Main-tab button to be called **Batch Process Dialogue**. Text 
 - The guide still describes a service on the same computer; update its Connection text when office-network access is built (step 3 onwards).
 - Not touched: `PER-CLIP-MODE.md`, `PLANNING.md`, `PREMIERE-MUSIC-PASS.md`, `research/`.
 
-## Latest — Debian installer, Linux start script and cache fix, step 2 of the shared-GPU plan (2026-10-05)
+## Debian installer, Linux start script and cache fix, step 2 of the shared-GPU plan (2026-10-05)
 
 Dan confirmed the GPU machine will run Debian. All changes are in `..\WTVAudioWizard-Service` only; the plugin and the old service copies in this folder are untouched.
 
@@ -313,7 +355,7 @@ Read access: Dan granted this session read access to `C:\Users\Dan\Documents\Cod
 
 Noted for step 5: GAP-URGENet reserved about 9.9 GB on the 5080 (GPU-Test reference); on the 12 GB 3060 it will not share the card with another loaded model, so unloading idle models, or the low-VRAM variant, is required.
 
-## Latest — Service split into its own folder, step 1 of the shared-GPU plan (2026-10-05)
+## Service split into its own folder, step 1 of the shared-GPU plan (2026-10-05)
 
 The service side now also exists as a sibling folder, `..\WTVAudioWizard-Service` (beside this folder, same parent). Full path on Dan's PC: `C:\Users\Dan\Documents\Codex\2026-09-05\files-pasted-by-the-user-wtvaudiowizard\outputs\WTVAudioWizard-Service`. It holds `service/`, `runners/`, `scripts/`, the Python tests (`tests/*.py`), `requirements.lock.txt`, `start-service.ps1`, `setup-sidon.bat`, `.gitignore`, a copy of this PC's `local-config.json`, a new `local-config.example.json` and its own `README.md`. All Python files are byte-identical copies of the ones here.
 
@@ -361,7 +403,7 @@ Order of work:
 
 Unverified: the Mac HTTP check above; the 3060's speed and per-model memory; the Linux distribution is not yet known. Claude cannot move or delete files in this folder, so after step 1 Dan deletes `service`, `runners` and `scripts` from the old folder himself. See also `research/REMOTE-SERVICE-READINESS-2026-09-22.md`.
 
-## Latest — Kept files go in one WTVAudioWizard subfolder; Full sequence stops prompting (2026-10-05)
+## Kept files go in one WTVAudioWizard subfolder; Full sequence stops prompting (2026-10-05)
 
 Dan asked whether everything goes into the export folder. Two changes he approved:
 
@@ -378,7 +420,7 @@ Dan asked whether everything goes into the export folder. Two changes he approve
   - The folder button shows and opens the chosen export folder, or the active batch's clips folder.
 - **Tests.** `tests/output-folder.test.cjs` (6), plus a panel-help source check that all callers use the output folder. JS 372/372. Not yet checked in UXP. Reload the panel.
 
-## Latest — Export folder remembered per project; Change button (2026-10-05)
+## Export folder remembered per project; Change button (2026-10-05)
 
 Follow-up to the entry below. Dan works across projects, so the chosen export folder is now remembered per project, and he asked that the picker open in the folder the project is saved in.
 
@@ -404,7 +446,7 @@ Follow-up to the entry below. Dan works across projects, so the chosen export fo
 - **Not yet checked in UXP**, in particular that persistent tokens survive a Premiere restart on Windows and Mac. Reload the panel.
 - **Stale:** the operator guide's panel picture and callouts do not show the Change button.
 
-## Latest — "No folder" button chooses a folder (2026-10-05)
+## "No folder" button chooses a folder (2026-10-05)
 
 Dan asked that clicking the folder button when it reads "No folder" lets him choose one.
 
@@ -433,11 +475,11 @@ Dan asked that clicking the folder button when it reads "No folder" lets him cho
 - **Naming review, 2026-10-01.** Suggested but not chosen by Dan: Unmute → "Unmute raw", Select muted → "Select auto-muted", and one capitalisation style for all buttons.
 - **Guide.** `docs/WTVAudioWizard-Guide.html` is current but hand-edited. The other agent's generator (`work/build-plugin-guide.py`) is out of step and would overwrite these edits if rerun. The panel image is a rendered preview; swap in a real Premiere capture if Dan supplies one.
 
-## Latest — Guide: section taglines removed (2026-10-02)
+## Guide: section taglines removed (2026-10-02)
 
 Dan asked to remove the large tagline headings under parts 2–6 of `docs/WTVAudioWizard-Guide.html`: "One pass, seven steps.", "Measure. Flag. Then listen.", "Use when the edit needs it.", "Adjust the next action." and "Keep the next move simple." Each of those sections now has only its small label ("02 / Quick workflow" and so on), which became the section's `h2` (`h2.eyebrow.section-title`, same look as before) so the page keeps a heading per section. Part 1 keeps "The Panel". Rechecked at 1280 px and 390 px: 18 callouts, no errors, no external requests.
 
-## Latest — Operator guide updated for the current panel (2026-10-01)
+## Operator guide updated for the current panel (2026-10-01)
 
 `docs/WTVAudioWizard-Guide.html` (the other agent's guide, 2026-09-29) was stale after the Processing menu, the Level/De-ess split, Mute raw when done and the four renames. Updated in place; it stays a single self-contained file.
 
@@ -452,7 +494,7 @@ Dan asked to remove the large tagline headings under parts 2–6 of `docs/WTVAud
 - **Checked** in headless Chromium at 1280 px and 390 px: image loads, all 18 callouts activate with the right names, seven workflow tabs, no horizontal overflow, no JS errors, no external requests.
 - The guide was edited directly. The other agent's generator in the workspace `work/` folder (`build-plugin-guide.py`) was not accessible from this session and is now out of step with the HTML.
 
-## Latest — Button renames (2026-10-01)
+## Button renames (2026-10-01)
 
 Dan chose four renames after a naming review. Only labels and user-facing text changed; element IDs, module, function and setting names are unchanged (`restoreSpeech`, `restore-speech.js`, `musicPass`, `fixPop`, `autoMute`).
 
@@ -475,7 +517,7 @@ Dan chose four renames after a naming review. Only labels and user-facing text c
 - JS 353/353. Previewed at 320 px and 240 px: "Fix pop at playhead" and "Level & duck music" wrap to two lines at 240 px without clipping. Not yet checked in UXP. Reload the panel.
 - **Stale doc:** `docs/WTVAudioWizard-Guide.html` still uses the old names.
 
-## Latest — "Auto mute" checkbox on Main (2026-10-01)
+## "Auto mute" checkbox on Main (2026-10-01)
 
 Dan asked for a Main-tab tickbox, **Auto mute**, that turns off automatic muting of the raw audio in every feature that mutes it when processing.
 
@@ -497,7 +539,7 @@ Dan asked for a Main-tab tickbox, **Auto mute**, that turns off automatic muting
   - Restore Speech still refuses clips already WTV-muted.
 - **Tests.** JS **353/353**, with new cases: per-clip full lane and partial lane with auto mute off, applyStems off, Restore Speech off, and the settings default. Layout previewed at 320 px; not yet checked in UXP. Reload the panel; no service change.
 
-## Latest — Live job progress during model runs (2026-09-29)
+## Live job progress during model runs (2026-09-29)
 
 Dan asked whether the service could report percent done. He had noticed that uvicorn's console lines are only the panel polling `GET /v1/jobs/{id}` about once a second. The job's `progress` already reached the panel, but it sat at 15% for the whole model call and jumped to 80% when it returned. Both requested parts are implemented.
 
@@ -527,7 +569,7 @@ Dan asked whether the service could report percent done. He had noticed that uvi
   - `scripts/validate_restore.py` now records a `progress_seen` timeline per run.
 - **Needs.** Restart the service.
 
-## Latest — Clean Dialogue Processing menu; Level and De-ess split (2026-09-29)
+## Clean Dialogue Processing menu; Level and De-ess split (2026-09-29)
 
 Dan approved: move the processing controls out of Options into a collapsible menu under Clean Dialogue, keep Restore Speech separate, and split Level from De-ess.
 
@@ -561,7 +603,7 @@ Dan approved: move the processing controls out of Options into a collapsible men
 - **Needs:** restart the service (for `deess`) and reload the panel.
 - **Stale doc:** `docs/WTVAudioWizard-Guide.html`, from the other agent's earlier entry, still describes these checkboxes under Options > Clean dialogue.
 
-## Latest — Interactive single-file operator guide (2026-09-29)
+## Interactive single-file operator guide (2026-09-29)
 
 Created `docs/WTVAudioWizard-Guide.html`: standalone HTML with embedded CSS, JavaScript and the actual panel screenshot captured from Dan's open Premiere window (not a mockup). Original capture retained as `docs/panel-premiere.png`; only the HTML is needed to share/use the guide. No network requests or external assets.
 
@@ -570,11 +612,11 @@ Includes 16 clickable/keyboard-accessible screenshot callouts, a seven-step work
 Validated in headless Edge at desktop and 390px mobile widths: image loads, all callouts activate, workflow keyboard navigation works, checklist persists/clears, print expands details, no horizontal overflow, no JS errors or external requests. Guide build/check utilities are in workspace `work/build-plugin-guide.py` and `work/check-plugin-guide.cjs`. This is documentation only; no plugin/service behavior changed.
 
 
-## Latest — Check dialogue quality idle caption removed (2026-09-29)
+## Check dialogue quality idle caption removed (2026-09-29)
 
 Same treatment as the loudness caption below. `#qualityResult` ("Select dialogue clips on the timeline, then check quality.") now starts empty and hidden (`display:none`). The `checkQuality` action shows it when a scan starts, so results and failure text still appear. The button's hover text covers selecting clips. JS 345/345. Reload the panel.
 
-## Latest — Verify loudness idle caption removed (2026-09-29)
+## Verify loudness idle caption removed (2026-09-29)
 
 Dan asked to remove the caption above Restore Speech that read "Full audible sequence. Reports LUFS and sample peak; no level changes."
 
@@ -583,7 +625,7 @@ Dan asked to remove the caption above Restore Speech that read "Full audible seq
 - The button's own hover text still explains what it measures.
 - JS suite 345/345. Previewed at 320 px, not yet in UXP. Reload the panel.
 
-## Latest — Restore Speech tooltip shortened; button colours (2026-09-29)
+## Restore Speech tooltip shortened; button colours (2026-09-29)
 
 - **Tooltip.** Dan asked for a shorter Restore Speech tooltip with no mention of Sidon, the GPU or the service connection. It now reads: select clips; rebuilds the voice, removing echo, room sound and noise; best for / avoid for lists; result goes on a Restored speech track with the originals muted (Unmute reverts); audition before delivery.
 - **Colours.**
@@ -593,7 +635,7 @@ Dan asked to remove the caption above Restore Speech that read "Full audible seq
   - Disabled buttons still render flat grey via `.is-disabled !important`.
 - **Checks.** Previewed in headless Chromium at 320 px, not yet in UXP. JS suite 345/345. Reload the panel; no service restart needed.
 
-## Latest — Restore Speech button: Sidon speech restoration on the service GPU (2026-09-29)
+## Restore Speech button: Sidon speech restoration on the service GPU (2026-09-29)
 
 Dan compared Sidon, Resemble Enhance and Adobe Podcast on `genre_search_draft_1` (Derev-Test kit, RTX 5080) and ruled out Resemble on quality. Sidon (`sarulab-speech/sidon-v0.1`, MIT, single-speaker; DialogueSidon is non-commercial and not used) is now a **Restore Speech** button on Main, in a row with Check dialogue quality (the service/GPU buttons). Its hover text lists use cases (echoey rooms, distant camera mics, phone/Zoom/laptop audio, noisy location interviews, muffled archive audio, any language) and when not to use it (singing or music under the voice, overlapping talkers, scenes where room sound should stay), plus the re-synthesis caveat.
 
@@ -624,7 +666,7 @@ Dan compared Sidon, Resemble Enhance and Adobe Podcast on `genre_search_draft_1`
   - **Not yet checked live in Premiere:** the panel button, placement on the new track, muting originals.
 - **To use:** restart the service (it must load the new config) and reload the panel, then Connect.
 
-## Latest — Reset/preset coverage audited; quality default 1.5 (2026-09-28)
+## Reset/preset coverage audited; quality default 1.5 (2026-09-28)
 
 Confirmed qualityThreshold was stored in a standalone global key and omitted from Reset, preset persistence, settings files and Changed from defaults. It is now a normal portable per-preset field (range 1–5), with default **1.5** in panel markup, FACTORY_DEFAULT_VALUES, old-settings fallback, plugin scan fallback and service schema/analyzer. Removed the global-key reader/writer; reset clears that obsolete key. Older preset/settings files missing qualityThreshold load 1.5. Explicit values in newer files remain intact.
 
@@ -633,12 +675,12 @@ Confirmed qualityThreshold was stored in a standalone global key and omitted fro
 Audit tests execute the actual reset function against every field and check all input/select controls are covered except explicitly contextual controls. Added quality persistence, bounds and backward compatibility tests. **335 JS tests pass.** UI and service default now agree. Reload the panel; choose Reset this preset to defaults to reset existing saved values. No service restart needed for the panel's explicit threshold, but restart to pick up the new server fallback.
 
 
-## Latest — Concise quality marker text (2026-09-28)
+## Concise quality marker text (2026-09-28)
 
 Marker titles now contain only the overall score to two decimals (e.g. `2.43`). Comments: `overall 2.43, speech 2.60, background 2.10. (Lower is worse)`. Red colour unchanged. Creation uses a temporary internal name, then renames during the colour transaction. Rerun ownership is stored separately by marker GUID, project path and sequence GUID in panel localStorage (memory fallback); legacy verbose markers for the matching clip scope are still recognized and replaced. Existing markers acquire the concise text when that clip is scanned again. GUID ownership requires Premiere 26.3+ (user is on 26.5); on older hosts or after clearing panel storage/moving projects between machines, renamed markers cannot be reliably matched and may remain on rerun. 11 quality tests pass including exact text and repeat replacement. Reload panel; no service changes.
 
 
-## Latest — Quality scan corrected to selected clips; compact UI (2026-09-28)
+## Quality scan corrected to selected clips; compact UI (2026-09-28)
 
 Dan clarified that quality review must operate on selected timeline audio clips. Removed the track-number selector and long implementation/explanatory paragraphs. Options now contains the review threshold and one brief sentence. Main says to select dialogue clips.
 
@@ -649,7 +691,7 @@ Reruns replace only the tool's markers for matching track/start/end clip scope, 
 Validation: 10 quality JS tests cover empty selection, unselected same-track exclusion, separate multi-clip exports, timeline offsets/clamping, scoped replacement, timeline changes, service cancellation and export retention. Full JS suite and 320px browser layout checked. Native Premiere behavior remains unverified. Reload panel; no service changes required for this correction.
 
 
-## Latest — DNSMOS moved into the connected service (2026-09-28)
+## DNSMOS moved into the connected service (2026-09-28)
 
 Supersedes the separate local CPU-helper implementation, which Dan asked to remove. **Check dialogue quality now requires the existing Connect session** and uses the same URL/token, authenticated asset uploads and request boundary as cleanup. No helper folder picker, standalone scripts, file queue or editing-machine Python requirement. Red duration-marker behavior and track/threshold controls remain.
 
@@ -663,7 +705,7 @@ Validation: **328/328 JavaScript tests**, **7/7 quality Python/API tests** inclu
 
 **Existing deployment limitation:** `local-api.js` and service Host/bind policy remain loopback-only. Moving DNSMOS to the service does not itself enable a Mac to reach a different machine. Remote HTTPS/host support remains separate work; do not claim it is implemented.
 
-## Latest — Presets area in Options is collapsible, collapsed by default (2026-09-26)
+## Presets area in Options is collapsible, collapsed by default (2026-09-26)
 
 The Preset name box, Save as new preset / Delete this preset, and their help line now sit inside `#presetsSection`, under a **+ Presets** toggle (`#togglePresets`, same `section-toggle nested options-toggle` style as Levels & stems or Ducking).
 
@@ -671,7 +713,7 @@ The Preset name box, Save as new preset / Delete this preset, and their help lin
 - `resetActivePresetToDefaults()` preserves the Presets area's current open/closed state. It rewrites the options-UI blob, and it also runs when switching to a preset that has no saved settings yet; the area isn't a preset setting.
 - JS suite 320/320. Collapsed state previewed in headless Chromium. Not checked live.
 
-## Latest — User-created presets with custom names (2026-09-25)
+## User-created presets with custom names (2026-09-25)
 
 Options → just above Save/Load settings: a **Preset name** box, **Save as new preset** and **Delete this preset**.
 
@@ -692,7 +734,7 @@ Options → just above Save/Load settings: a **Preset name** box, **Save as new 
   - **Not checked live in UXP**, notably that UXP's `<select>` redraws after its options are rebuilt. If the menu looks stale after creating a preset, that's the first suspect.
 - Custom presets live in this panel's local storage only. They aren't written to Save-settings files and aren't shared between machines.
 
-## Latest — New preset "Natural (MossFormer)" (2026-09-25)
+## New preset "Natural (MossFormer)" (2026-09-25)
 
 A fourth project preset, `id: 'natural'`, label **Natural (MossFormer)**, whose factory default model is **MossFormer2** instead of GAP-URGENet. Everything else starts at the same factory defaults as the other presets, and like them it remembers its own last-used settings.
 
@@ -704,7 +746,7 @@ A fourth project preset, `id: 'natural'`, label **Natural (MossFormer)**, whose 
 - Checked: the helpers were extracted and run under Node (promo/interview/camcorder → gap_urgenet; natural → mossformer2). JS suite 315/315.
 - Not checked live. MossFormer2 must show as available after Connect, or cleanup reports the model as unavailable (the same check as picking it by hand).
 
-## Latest — Main tab simplified: one Clean Dialogue button, music buttons merged (2026-09-25)
+## Main tab simplified: one Clean Dialogue button, music buttons merged (2026-09-25)
 
 At Dan's request (this supersedes the menu-button entry below):
 
@@ -731,7 +773,7 @@ At Dan's request (this supersedes the menu-button entry below):
 - **Checked:** layout previewed in headless Chromium at 300 px. **Not checked live**, including Full sequence mode through the single button (its process stage still opens the "choose the exported WAV" picker) and the combined duck-then-normalize on real music.
 - `README.md` still describes the old numbered steps; not updated.
 
-## Latest — Run clean dialogue always visible; steps 1–3 behind a menu button (2026-09-25)
+## Run clean dialogue always visible; steps 1–3 behind a menu button (2026-09-25)
 
 At Dan's request, the "− Clean dialogue" collapsible group header is gone. **Run clean dialogue (steps 1–3)** now sits permanently at the top of the group, with a small three-bar menu button (`#toggleCoreSteps`) on the same row. That button shows or hides `#coreStepsSection`, which now holds only 1. Prepare exports / 2. Clean audio / 3. Add clean tracks.
 
@@ -746,7 +788,7 @@ At Dan's request, the "− Clean dialogue" collapsible group header is gone. **R
   - No longer forced open when Run or step 1 starts.
 - **Checks:** JS suite 314/314. The layout was previewed in headless Chromium at 300 px wide with the menu open and closed; it looked right. UXP rendering may differ slightly and has **not been checked live**.
 
-## Latest — Verify loudness always renders fresh; render cache removed (2026-09-25)
+## Verify loudness always renders fresh; render cache removed (2026-09-25)
 
 Live: Dan ran Verify loudness with two tracks soloed, un-soloed them, and reran it. The rerun said "Reused the previous render" and reported the soloed mix. The cache key was sequence id, channels, `host.signature()` and `effectSignature()`, and none of those can see solo. That isn't fixable: Premiere's UXP `AudioTrack` exposes only mute. There is no solo, track volume/pan or track-effects read (checked against Adobe's reference, and now noted in `research/UXP-QUIRKS.md` §4). Because the cache can't be made safe, it's gone, as Dan suggested.
 
@@ -761,7 +803,7 @@ Changes:
 
 Note for users: Verify loudness measures what Premiere exports *right now*, including any solo or mute. Clear solos before a final check.
 
-## Latest — Regression audit: what reverted files, and the true test baseline (2026-09-25)
+## Regression audit: what reverted files, and the true test baseline (2026-09-25)
 
 Dan asked whether UXP Developer Tool could be reverting files, and asked for a check for other regressions.
 
@@ -781,7 +823,7 @@ The cloud session's save-back therefore wrote an **older copy** of those files. 
 
 **True baseline:** the full JS suite, run on a fresh copy of exactly what is on disk (plugin, tests, WAV presets, `validation/music-local-parity.json`), is **314/314 passing**. Python service tests were not run in this audit.
 
-## Latest — Fix a pop enabled by default and works on any clip, not just Clean dialogue (2026-09-25)
+## Fix a pop enabled by default and works on any clip, not just Clean dialogue (2026-09-25)
 
 Dan asked for Fix a pop to stop being greyed out by default and to work on any clip, independently of Clean dialogue.
 
@@ -800,7 +842,7 @@ Tests:
 
 Not yet run live on a raw, non-Clean-dialogue clip.
 
-## Latest — Folder button gets a folder icon and clearer hover text (2026-09-25)
+## Folder button gets a folder icon and clearer hover text (2026-09-25)
 
 The destination-folder button (top of Main) only showed a folder name, so it wasn't obvious what it does. Changes:
 
@@ -812,7 +854,7 @@ The destination-folder button (top of Main) only showed a folder name, so it was
 
 Not yet checked live: confirm the icon sits vertically centred next to the name at the panel's normal width.
 
-## Latest — v0.8.1: Enhance low end button hidden; Extract ambience / Unmute / Select muted rearranged (2026-09-25)
+## v0.8.1: Enhance low end button hidden; Extract ambience / Unmute / Select muted rearranged (2026-09-25)
 
 At Dan's request:
 - **Enhance low end button removed from the panel, for now.** In `index.html` the row that held Enhance low end now reads *5. Normalize music levels | Extract ambience*. The next row reads *Unmute | Select muted*, and Verify loudness sits below that as before.
@@ -825,7 +867,7 @@ Checks: `node --check` is clean on all plugin JS, `manifest.json` parses, and th
 
 `panel-help`'s "every registered panel button exists in the markup" passes, confirming no dangling `enhanceLowEnd` reference. **Reload the plugin in UXP Developer Tool.** It should list 0.8.1.
 
-## Latest — Mono raw clips: Amplify's gain slider is "Gain", not Left/Right; fixed from the live param list (2026-09-25)
+## Mono raw clips: Amplify's gain slider is "Gain", not Left/Right; fixed from the live param list (2026-09-25)
 
 Add clean tracks failed twice on mono raw clips while muting the raw lane (first `C0062.wav`, then `Greg recording end.wav`). The second run's improved error printed the real Amplify parameter list on a mono clip:
 
@@ -848,7 +890,7 @@ Tests:
 
 **Not yet confirmed live.** Rerun steps 1–3 on the Greg / C0062 clips. Then check in Effect Controls that the raw clip's Amplify reads -96 dB on its Gain slider.
 
-## Latest — Select muted fixed: nullptr crash from using TrackItemSelection outside its callback (2026-09-25)
+## Select muted fixed: nullptr crash from using TrackItemSelection outside its callback (2026-09-25)
 
 Live within minutes of shipping the entry just below: Unmute worked first try (9 clips unmuted cleanly). Select muted crashed every attempt with `A nullptr was dereferenced` at `mute-tools.js:126` (`sequence.setSelection(selection)`).
 
@@ -860,7 +902,7 @@ Fix: `selectMuted()` now builds the selection, adds every item (with the require
 
 **Not yet re-verified live** -- Dan should retry Select muted on the same sequence (the 9 clips he just unmuted are gone now, but the "select muted" test needs at least one clip still muted by the Amplify workaround to select).
 
-## Latest — Unmute + Select muted buttons added (2026-09-25)
+## Unmute + Select muted buttons added (2026-09-25)
 
 Dan decided to keep the -96 dB Amplify mute workaround (see per-clip.js's `apply()` comment: disabling an audio clip item linked to video also disables the video, live 2026-09-17, so a partial in-place lane silences via Amplify instead of `createSetDisabledAction`). He'd first floated replacing it with disabling the track, then asked about unlinking audio from video first -- confirmed against Adobe's official UXP reference (`AudioClipTrackItem`, `TrackItem` (404'd), `SequenceEditor`) that **no link/unlink action exists in the API at all**, so that route is closed. Decision: keep the Amplify mute, add UI to reverse and locate it, since a muted clip isn't visually obvious on the timeline.
 
@@ -875,7 +917,7 @@ Tests: new `tests/mute-tools.test.cjs`, 7 cases (remove Amplify + strip suffix; 
 
 **Not live-tested against real Premiere** -- `createRemoveComponentAction` and `Sequence.setSelection` are both confirmed against Adobe's official reference docs but neither has been exercised live in this codebase before now (contrast with `createSetValueAction`/`createAppendComponentAction`, which are already proven live elsewhere in `per-clip.js`). Recommend Dan runs Clean dialogue on an in-place partial lane to produce a muted clip, then tries Unmute on it and Select muted across the sequence, and confirms both behave as expected before relying on them.
 
-## Latest — Same "script object no longer valid" bug found and fixed in Normalize music levels (2026-09-22)
+## Same "script object no longer valid" bug found and fixed in Normalize music levels (2026-09-22)
 
 Dan hit the same failure class again, this time from **Normalize music levels**, ~60s after a successful Music ducking run on the same 21-clip sequence:
 
@@ -896,7 +938,7 @@ Tests: existing 6/6 in `tests/normalize-music.test.cjs` still pass unchanged (th
 
 Given this is now the **second** independent call site hit by the same bug class in one day, it's worth a quick audit of the rest of the codebase for any other place that builds a `ComponentParam` value/keyframe action outside a `host.transaction` callback and commits it later -- `music-effects.js`, `music-pass.js`, and `music-bed-compress.js` all touch native component params and haven't been checked for this pattern yet.
 
-## Latest — Native Apply gain error diagnosed and fixed (2026-09-22)
+## Native Apply gain error diagnosed and fixed (2026-09-22)
 
 Used the open UXP Developer Tools against Premiere 26.5.1 with Dan's permission. Actual retained error was Add clean tracks / setClipGains on Bear Multicam Day1, during raw silencing after placement, not the pop/low-end changes. Console probes pinpointed `ComponentParam.createSetValueAction(key,true)` throwing "The script object is no longer valid" while constructing the action OUTSIDE a transaction. Fresh parameter lookup and synchronous keyframe construction did not fix it. Left was time-varying, but committing static mode and refetching also failed when value action was still constructed outside the transaction. On a disposable clone, constructing the SAME action inside host.transaction succeeded and read back `{value:0}` (normalized -96 dB), with isTimeVarying false. Diagnostic clone was removed successfully; original user sequence's pre-existing failed Apply/muted tracks were not repaired or removed. No project save issued.
 
@@ -907,7 +949,7 @@ Used the open UXP Developer Tools against Premiere 26.5.1 with Dan's permission.
 Reference: https://developer.adobe.com/premiere-pro/uxp/ppro-reference/classes/componentparam documents static parameter requirement; related Adobe forum reproduction/workaround: https://community.adobe.com/questions-729/premiere-pro-26-3-regression-componentparam-createsetvalueaction-throws-the-script-object-is-no-longer-valid-1628867 . Local native probe is the evidence for this installed host.
 
 
-## Latest — Fix a pop and Enhance low end now run entirely in-panel, no service (2026-09-22)
+## Fix a pop and Enhance low end now run entirely in-panel, no service (2026-09-22)
 
 Dan asked for Fix a pop and Enhance low end to work without going through `127.0.0.1`, with an eye toward Mac support and a hint that UXP might help. New `plugin/local-dsp.js` ports both algorithms to pure JS (a hand-written WAV codec plus both DSP routines) and `plugin/deplosive.js`/`plugin/lowend.js` now call it directly instead of `/v1/deplosive`/`/v1/lowend` -- no upload, no download, no service dependency for either feature. This follows directly from [research/REMOTE-SERVICE-READINESS-2026-09-22.md](research/REMOTE-SERVICE-READINESS-2026-09-22.md), which flagged these two as the only genuinely portable endpoints (`/v1/jobs` still needs a GPU and stays server-side).
 
@@ -925,7 +967,7 @@ Files: new `plugin/local-dsp.js`; edited `plugin/deplosive.js`, `plugin/lowend.j
 
 Validation: 29/29 in `tests/deplosive.test.cjs`, 13/13 in `tests/lowend.test.cjs`, 7/7 new in `tests/local-dsp.test.cjs`, full `tests/*.test.cjs` suite (122 tests) otherwise green except one **pre-existing, unrelated** failure noted for the record, not touched here: `tests/panel-help.test.cjs`'s `openDestinationFolder` hover-description check (unrelated markup gap). Also found and fixed in passing: `deplosive.test.cjs` had a stale assertion referencing an "Insert clean dialogue first" message that doesn't exist anywhere in the code -- rewritten to match `run()`'s actual standalone-context behavior instead of deleting it. `node --check` clean on all new/edited files. **Not live-tested against a real Premiere/UXP host** -- neither the WAV codec against Premiere's actual export bit depth (all of PCM 8/16/24/32 and float 32/64 are supported, since the `.epr` preset's exact format couldn't be confirmed by inspection) nor the RBJ-vs-Butterworth Enhance low end output against a real ear. Recommend: run both features live, and specifically A/B the new Enhance low end output against a saved pre-change result if Dan has one.
 
-## Latest — Mixed batches grouped by model (2026-09-21)
+## Mixed batches grouped by model (2026-09-21)
 
 Approved fix for repeated Bandit/GAP reloads across 156 clips. `clip-batch.js` now performs a native dialogue-cache pass for ALL raw exports first (GAP or MossFormer), then runs normal mixed jobs with Bandit and required cached dialogue. Both receive the SAME RAW upload; never feed cleaned dialogue to Bandit. First pass returns before dialogue finishing; final jobs retain the existing joint normalization/ducking/peak protection. This avoids independently finishing stems or changing the mixing behavior. Dialogue-only and no-enhancer batches retain their original path. One model remains resident; no concurrent inference or increased model residency budget. One model switch expected for a cold uninterrupted mixed batch absent other clients/idle expiration.
 
@@ -934,11 +976,11 @@ Service JobRequest adds `stage_mode: dialogue_cache|complete` and `require_dialo
 **Restart service and reload plugin after current work finishes.** Old service rejected with explicit restart guidance before grouped uploads. Do not restart an active inference job automatically. Version remains 0.8.0; ZIP not rebuilt. Validation: 22 focused JS tests pass; 37 service tests pass (known unrelated music-analysis baseline expectation excluded). Integration test proves GAP/GAP/Bandit/Bandit order, both inputs equal raw samples, native cache reuse on retry, missing-cache failure without GAP reload, and sample-identical final stems vs the original finishing path with mocked model outputs. Cancellation after submission tested. No real-GPU throughput measurement performed, so no promised speedup or completely flat VRAM graph. Historical cold/warm measurements support this direction; actual inference still allocates working memory per block.
 
 
-## Latest — Remote-service readiness: design notes (2026-09-22)
+## Remote-service readiness: design notes (2026-09-22)
 
 Dan noted `http://127.0.0.1:8756` will eventually be a remote server and asked to develop with that in mind -- not a code change, a request to document the tradeoffs before making any. Wrote [research/REMOTE-SERVICE-READINESS-2026-09-22.md](research/REMOTE-SERVICE-READINESS-2026-09-22.md). Key points: (1) `plugin/local-api.js`'s `normalizeBaseUrl()` currently hard-rejects any host but `127.0.0.1`/`localhost:8756` -- a real blocker, and HTTPS has to become mandatory in the same change (the Bearer token is sent over plain HTTP today, fine only because it never leaves the machine); (2) `/v1/deplosive` (Fix a pop) and `/v1/lowend` (Enhance low end) are plain CPU DSP, not model jobs, and are candidates to eventually move into plugin JS and skip the round trip entirely; (3) but the real latency exposure is `clip-batch.js processBatch`'s **sequential** per-clip upload/poll/download loop on 100+ clip batches -- that traffic can't move client-side (it needs the model) and is the highest-frequency call path by far, so it's the thing to design around first, before porting the two DSP endpoints. No files besides the new research doc changed.
 
-## Latest — Fix a pop: "Could not identify the pop-fix render sequence." inside a nest (2026-09-22)
+## Fix a pop: "Could not identify the pop-fix render sequence." inside a nest (2026-09-22)
 
 Dan's Copy report: fixPop failed twice in a row with that error, right after an unrelated Apply/`setClipGains` failure ("The script object is no longer valid.") on the same sequence -- the two are unconnected; the gain error is the known stale-handle-after-transaction class already in UXP-QUIRKS.md #1, not investigated further here. Dan then asked "it's in a nest, could that be why" -- yes. `deplosive.js run()` identified its scratch render clone with a plain before/after `listSequences()` diff, but `listSequences()` (and `getSequences()` under it) does not list a nested sequence, or a clone made of one, while it's the active sequence (UXP-QUIRKS.md #1) -- so cloning while editing inside a nest left the diff empty and `run()` threw immediately, before any export or edit.
 
@@ -948,19 +990,19 @@ While verifying, found and fixed a second, unrelated problem: `tests/deplosive.t
 
 Not live-tested against a real nest (Dan's report didn't confirm root cause before asking; next Fix a pop attempt inside that nest will confirm). If it still fails, the new error text will say how many candidate sequences it found and whether the active sequence looked unlisted, which narrows it further.
 
-## Latest — Clean dialogue missing options: Grid regression corrected (2026-09-21)
+## Clean dialogue missing options: Grid regression corrected (2026-09-21)
 
 Dan again reported missing ambience/other Clean dialogue settings. All checkbox IDs remain in HTML, but style.css had reverted `.check-grid` to display:grid and had no `.check-row` rule despite the row-based markup. Restored the documented UXP-compatible flex column container and wrapping flex rows, with non-shrinking rows. No settings/defaults/storage changes. Regression test `tests/cleanup-layout.test.cjs` checks flex rules and all nine cleanup controls. Reload panel; native confirmation pending. This is a confirmed source regression and a likely explanation for missing controls, not proof of any saved-value loss.
 
 
-## Latest — Batch progress and time estimates (2026-09-21)
+## Batch progress and time estimates (2026-09-21)
 
 Implemented for per-clip Prepare exports and Clean audio, including the combined Run clean dialogue button. Footer shows phase, completed/total clips, duration-weighted percent, elapsed time and approximate phase time remaining; updates every second without filling the status log. Export progress advances on verified files; cleaning includes service progress but reserves completion until downloaded stems and manifest are saved. Each phase starts its own estimate. No ETA before the first measured non-reused clip; resumed/cached clips count as complete but do not train speed. Estimates use measured wall-time per audio second and can change with cold model startup, cache hits, clip length and service load. Overruns display "Estimating time remaining..." instead of a misleading zero. Timers and progress UI are cleared in finally on success, failure or cancellation. No estimates for Add clean tracks, full-sequence mode or standalone tools.
 
 Files: new `plugin/batch-progress.js`, main.js footer/timer wiring, clip-batch.js completion events, index.html compact estimate line. No service change, version bump or package rebuild; reload the panel. Validation: 19/19 focused tests (estimator + clip-batch), JS syntax check, browser smoke `work/check-batch-progress-ui.cjs` for estimate display/update/cleanup. Live Premiere appearance/performance not tested. Existing preset/handles changes preserved.
 
 
-## Latest — "Changed from defaults" list added under Reset (2026-09-21)
+## "Changed from defaults" list added under Reset (2026-09-21)
 
 Dan asked to see what's been changed in a preset: a collapsible list below the reset button of settings that differ from factory defaults. Added `#toggleChangedSettings` / `#changedSettingsSection` / `#changedSettingsList` in `plugin/index.html` right under `#resetAllOptions`, using the same collapsible-section pattern as the other Options toggles (`section()` helper, registered in the button-div list, expand state persisted in `OPTIONS_UI_KEY` like the others -- global, not per-preset, same as the section already noted for that key).
 
@@ -968,11 +1010,11 @@ Dan asked to see what's been changed in a preset: a collapsible list below the r
 
 Not live-tested (same UXP-only constraint as the rest of the preset work -- `main.js` can't run under plain Node). Live-check: open Options, expand "+ Changed from defaults", change a target, confirm it appears with old/new values, switch presets and confirm the list updates to that preset's own diffs, hit "Reset this preset to defaults" and confirm it goes back to "No changes from factory defaults." `panel-help.test.cjs` still only the one known `openDestinationFolder` failure; `settings-file` 6/6 pass (unaffected -- this feature doesn't touch that schema).
 
-## Latest — "Reset all settings" renamed/clarified as per-preset (2026-09-21)
+## "Reset all settings" renamed/clarified as per-preset (2026-09-21)
 
 Dan asked how Reset all settings to defaults interacts with presets, and whether it should be preset-scoped, and to rename it if so. It already only resets the active preset: `resetAllSettingsToDefaults()` (renamed `resetActivePresetToDefaults()`) is followed by `rememberSettings()`, which writes to the currently active preset's own key (`presetSettingsKey(activePreset)`) -- the other two presets' saved settings are untouched, unaffected until you switch to them. The old name/label just predated presets and read as global. Renamed for clarity, no behavior change: button id `resetAllOptions` label is now "Reset this preset to defaults" (tooltip: "Reset every setting on this preset to factory defaults. The other two presets are untouched."), its confirmation message names the preset ("All Interview preset settings restored..."). The smaller `reset` button (targets only) got the same treatment: "Reset targets (this preset)". One caveat carried over unchanged: the panel-layout prefs under `OPTIONS_UI_KEY` (active tab, scroll position, which sections are expanded) are still global, not per-preset -- resetting the current preset also collapses sections / resets scroll for the whole panel, not just that preset's view. That's existing behavior, not new, and seems fine to leave (it's UI chrome, not an audio setting) but flagging in case it surprises anyone. Not live-tested (same UXP-only constraint as the preset feature itself); `panel-help.test.cjs` still has the one known `openDestinationFolder` failure only.
 
-## Latest — Presets per project type added (2026-09-21)
+## Presets per project type added (2026-09-21)
 
 Dan asked for a preset dropdown in the top-right corner: Promo/Action, Interview, Camcorder (Camcorder is the default). Added `plugin/index.html`'s heading `#presetSelect` and `plugin/style.css`'s compact heading-select rule. All three presets start identical, on the existing factory defaults (`defaults.json`) -- Dan will tailor each himself.
 
@@ -982,19 +1024,19 @@ Also removed: the legacy `action('connect')` fallback that reapplied a single gl
 
 Not yet touched: `settings-file.js`/the Save/Load-to-file feature is unchanged and preset-agnostic (loading a file overwrites whichever preset is currently active). `compressMusicBed`/`stripMusicVolume` and other `OPTIONS_UI_KEY` panel-only prefs stay global, not per-preset (they're auxiliary music-pass toggles, not part of what Dan asked to vary per project type). No automated test coverage added -- `main.js` can't load under plain Node (see UXP-QUIRKS.md #7), so this needs a live UDT check: switch presets, edit a target on each, reload the plugin, confirm each preset re-opens with its own last edit and Camcorder is the default on first-ever launch. `panel-help.test.cjs` unaffected (still the one known `openDestinationFolder` empty-tooltip failure). Next up per Dan: progress/time estimates during a batch run.
 
-## Latest — AV-CASS dropped; Separator selector removed (2026-09-21)
+## AV-CASS dropped; Separator selector removed (2026-09-21)
 
 Dan decided not to pursue AV-CASS. Rationale (paper Table 8, all models trained on the same data): the audio-only AV-CASS variant is roughly on par with Bandit on FAD/KL, but Bandit has about 2 dB better SI-SDRi on every stem and slightly better dialogue PESQ (2.15 vs 2.08); the full AV-CASS wins mostly because of picture input, which this WAV-only pipeline cannot supply; DAVIS-Flow needs video and MRX trails Bandit. The only possible upside for the audio-only model is effects/ambience, unverified. With one separator left the panel's Separator dropdown (Options > Levels & stems) is gone; the panel always sends `bandit_v2`. Files: `plugin/index.html` (row and tooltip text), `plugin/main.js` (constant; removed select init), `plugin/settings-file.js` (`separator` no longer a saved field; old preset files that contain it still load, the key is ignored), `service/schema.py` (`av_cass` removed from the separator Literal; the API now returns 422 for it), `service/app.py` (health entry and 409 branch removed), tests updated (`settings-file`, `test_service`). `provided_stems` is unchanged. `research/AV-CASS-INTEGRATION.md` is kept as a record with a status banner. Restart the service (schema/health changed) and reload the plugin. Tests: settings-file 6/6 pass; `panel-help` still has its one known empty-tooltip failure (`openDestinationFolder`); Python test_service not run here (syntax-checked only).
 
-## Latest — "Mix on timeline" option removed (2026-09-21)
+## "Mix on timeline" option removed (2026-09-21)
 
 Dan asked to remove Mix on timeline (raw + clean both audible at a fixed 50/50 Amplify split). Add clean tracks now always mutes/silences the raw lane as before. Removed: the Options checkbox (`plugin/index.html`), all `mixOnTimeline`/`timelineMix`/`serviceWet` handling in `plugin/main.js`, `mixGains()`/`applyMixGains()`, the timeline-mix branch of `apply()` and the `MIX_SUFFIX` label in `plugin/per-clip.js`, and the `mixOnTimeline` field in `plugin/settings-file.js` (old saved/preset files that contain it still load; the value is ignored). `WTV_NAME_SUFFIX` still strips a ` · WTV mix` label from clips renamed by earlier runs. Tests: the two mix tests were removed from `tests/per-clip.test.cjs`; `tests/settings-file.test.cjs` no longer lists the field, and its 6 cases now pass (the standalone "reading 'checked'" failures recorded earlier were this field). per-clip 51/51, settings-file 6/6; panel-help still has its one known empty-tooltip failure. Not confirmed live; reload the panel and check Options > Clean dialogue has no Mix on timeline and Add clean tracks still works.
 
-## Latest — Handles confirmed working live on a file-backed clip (2026-09-21)
+## Handles confirmed working live on a file-backed clip (2026-09-21)
 
 Dan's Copy report: `C0046.MP4` with 0.5 s requested got 0.467 s head and tail (14 whole frames at 29.97), Prepare exports, Clean audio and Add clean tracks all completed (`Applied: true`, gain step OK). Earlier runs' failures are resolved by: whole-frame handle lengths, the stepwise scratch trim (source in/out first, timeline start/end only if needed) and the locked-file/gain fixes below. A multicam clip in the same batch correctly falls back ("No file-backed source"). Confirmed by Dan that the handles are present (hidden extra audio available when the clean clip is extended). Still unverified live: off-grid clips (C0021.MP4, tolerance fix), handles combined with Mix on timeline, and re-running on already-cleaned clips. Known cosmetic issue: the Copy report's "Last error" line is not cleared after a later success, so it can show a stale error next to `Applied: true`.
 
-## Latest — Optional per-clip handles implemented (2026-09-21)
+## Optional per-clip handles implemented (2026-09-21)
 
 Dan authorized implementation now, with native testing after delivery; the feasibility plan's manual proof gate is superseded.
 
@@ -1009,7 +1051,7 @@ Expanded exports get distinct IDs and an exact export-identity comparison (seque
 Validation: **72/72 focused JS tests** (per-clip, clip-batch, settings-file), including source/timeline clamps, old-host fallback, retimed skip, 29.97 off-grid alignment, hidden import trims, scratch trim failure, unconfirmed export retention, 30-minute overhead, cache invalidation, old settings migration. Browser smoke `work/check-handles-ui.cjs` passes: default state, enabling/number control, full-sequence disabling, save/restore after reload, existing offline music action. Legacy `work/check-panel.cjs` cannot run against current button-div UI (mock lacks classList); use the browser smoke. Full JS suite: 285/287 pass; the two previously documented unrelated failures remain (loudness export mock and empty static destination-folder tooltip). No GPU or live Premiere test performed. Plugin-only changes: reload panel; no service restart needed for handles. Source version remains 0.8.0; ZIP not rebuilt.
 
 
-## Latest — Handles live run 3: Prepare/Clean OK with handles; off-grid clip skipped handles; Add clean tracks "Script action failed to execute" (2026-09-21)
+## Handles live run 3: Prepare/Clean OK with handles; off-grid clip skipped handles; Add clean tracks "Script action failed to execute" (2026-09-21)
 
 Dan: with the stepwise trim change, Prepare exports and Clean audio work with handles on (the file-backed clip extends; the multicam clip falls back). An earlier Add clean tracks run crashed Premiere (no report captured). A later run added the cleaned file to the timeline but with no handles and this Copy report: handle result for `C0021.MP4` was `"Source bounds unavailable or retimed"` (head/tail 0), then Apply failed in `setClipGains` phase 2 (`Gain: setting 1 level(s)`) with `Script action failed to execute.`; Apply rolled back (raw mute restored, added tracks muted).
 
@@ -1017,15 +1059,15 @@ Dan: with the stepwise trim change, Prepare exports and Clean audio work with ha
 2. **"Script action failed to execute" during gain set (cause unknown):** the same transaction also renamed the raw clip (` · WTV muted` label). Changes, both in `setClipGains` (`per-clip.js`): the rename now runs in its own transaction after the gain is verified, with fresh handles, and its failure is ignored (cosmetic, must not roll back Apply); the gain transaction's error now lists the clip, Amplify slot, param indices and dB being set. Rename-as-cause is a hypothesis only. Another candidate: the raw clip already carried an Amplify left by the crashed earlier run (the reuse check trusts the recorded slot; a stale/duplicate Amplify could make the set fail). Before retesting, Dan should Undo the failed Apply (or delete the muted added track and any Amplify left on the raw clip) so the sequence is clean.
 Not confirmed live. If it fails again, send the report: the error text will now name the exact gain action set.
 
-## Latest — Handles, second live failure: whole-frame handles still rejected; extension now stepwise with a trace (2026-09-21)
+## Handles, second live failure: whole-frame handles still rejected; extension now stepwise with a trace (2026-09-21)
 
 Second Copy report (handles floored to 14 frames = 0.467 s, so all four requested values are on the frame grid) still failed the same read-back. The new diagnostic was uninformative by itself: the three "found" clips were earlier clips of the same source file (starts ~122.2e12, before the requested ~128.7e12), i.e. the extended clip was not among the first three same-source clips, so it is unknown whether Premiere moved the clip, resized it, or left it untouched. Frame grid was therefore not (only) the cause. Two suspected causes remain: (a) trim semantics, where in/out and start/end are coupled (setting a source in-point also moves the timeline start), so setting all four in one transaction gives a different result than requested; (b) the clip is adjacent to a neighbor on the same track (clips in this multicam batch are contiguous) so the scratch clip cannot grow into occupied space even though the neighbors are disabled. `extendRenderClip` (`plugin/per-clip.js`) now: applies source in/out first in one transaction; reads back the clip located by overlap with the original cut (not exact ticks); only if start/end still differ applies setStart/setEnd and reads back again; on failure the error lists every clip at the cut with start/end/in/out (and marks other sources / disabled) after each step. Tests 52/52. Next step is another live run: the new `Trace:` text will show which of (a) or (b) is happening. If (b), handles on touching clips need a different approach (e.g. exporting the source region from a dedicated scratch sequence containing only that clip, instead of extending it in place on the clone).
 
-## Latest — Handles: "Premiere did not preserve the requested handle trims" on first live run (2026-09-21)
+## Handles: "Premiere did not preserve the requested handle trims" on first live run (2026-09-21)
 
 Dan's Copy report (Prepare with handles 0.5 s, 2 clips): the multicam clip correctly reported "No file-backed source" (exact-cut fallback), but the file-backed clip `C0046.MP4` (handles 0.5/0.5) failed in `extendRenderClip` at the read-back check. The report's own numbers show why: the source in/out (`sourceIn` 46006.0 frames, `sourceOut` 46130.0) and the clip's timeline start are exactly on the 29.97 frame grid, but 0.5 s is 14.985 frames, so the requested in/out/start/end (`inTicks` 45991.015 frames etc.) were off the frame grid. Premiere snaps track-item trims to whole frames (same family as the placement flooring in UXP-QUIRKS.md section 2), so the read-back did not match the exact request. Fix (`plugin/per-clip.js addHandles`): head and tail are floored to whole sequence frames (0.5 s becomes 14 frames = 0.467 s at 29.97) so all four values stay on the grid; the error now also prints the expected and actual start/end/in/out ticks and the sequence frame size, so any remaining mismatch is diagnosable. Test added (`tests/per-clip.test.cjs`, handle lengths are whole frames); per-clip suite 52/52. Not yet confirmed live: retry Prepare with handles on a file-backed clip. If it still fails, send the new error text (it contains expected vs found ticks). Caveat: quantizing uses the sequence frame; footage at a different frame rate than the sequence may still snap on its own grid.
 
-## Latest — Ambience hardening + handles feasibility (2026-09-21)
+## Ambience hardening + handles feasibility (2026-09-21)
 
 Implemented overlap-aware destination lanes; non-overlapping clips still share a lane. Verify BOTH start/end and all preexisting clips including previously generated outputs. Post-insertion failure stops the batch and mutes affected ambience lane; no speculative multi-transaction Undo/rollback. Active-sequence/layout change also stops rather than continuing on stale selection. Pre-edit eligibility failures still report per clip. Snapshot now reads inventory once. Shared identifyNewSequence/project-bin fallback replaces list-only clone identification. Unconfirmed exports retain scratch sequence/WAV; verified exports use concurrent bounded file polling and one upload read.
 
@@ -1036,34 +1078,34 @@ Tests: 12 extraction tests pass, including overlapping output survival, duration
 Remaining: standalone still does not share Prepare's full off-grid frame-cover geometry; it now detects bad placement and stops/mutes rather than silently accepting truncation. No automatic rollback of uncertain native mutations. Asset/job retention policy unchanged. Optional cleanup stem levels still share mix protection. Handles plan: [research/HANDLES-FEASIBILITY-2026-09-21.md](research/HANDLES-FEASIBILITY-2026-09-21.md). Recommends 0.5 s each side, off by default, expanded scratch/source trims and hidden imported-media handles while preserving visible cuts; native round-trip proof is the gate. No handles UI implemented yet.
 
 
-## Latest — Ambience feature audit (2026-09-21)
+## Ambience feature audit (2026-09-21)
 
 Read latest -18 dBFS/default, locked-file and standalone updates and UXP quirks. Audit report: [research/AMBIENCE-AUDIT-2026-09-21.md](research/AMBIENCE-AUDIT-2026-09-21.md). No production edits. Existing extraction tests 9/9 pass, but mock reproductions expose two successes with one surviving overlapping output, and success despite shortened output duration. High priority: overlap-safe destination lanes, verify previously placed clips, stop/rollback on post-edit failures. Also identified missing frame-cover placement, raw-dialogue-dependent ambience attenuation (controlled repro -2.629 dB), unconditional cleanup of in-flight renders, and missing nested clone-discovery fallback. Panel -18 target is explicitly submitted; service -30 default does not override it. Full native extraction remains unverified. See report for evidence and proposed fix order.
 
 
 > **UXP / host quirks reference:** [research/UXP-QUIRKS.md](research/UXP-QUIRKS.md) consolidates every Premiere UXP quirk, limit and workaround found so far (stale handles, `getSequences()` gaps, tick strings, frame flooring, export misfires, panel UI regressions, encoding). Check it before debugging a host oddity, and add new findings there.
 
-## Latest — Options checkboxes: CSS grid replaced with flex rows (2026-09-21)
+## Options checkboxes: CSS grid replaced with flex rows (2026-09-21)
 
 Dan reported options missing from the Clean dialogue menu after the compaction below. All eight checkbox ids and both selects were still in the markup, so the likely cause is that UXP does not lay out `display:grid` reliably (the panel's layout is flexbox-based), so the `.check-grid` didn't render as intended. The checkboxes are now four `.check-row` flex rows of two labels each (`plugin/index.html`, `plugin/style.css`), the same flex mechanism `.field-row`/`.step-row` already use. Not confirmed live; if anything is still missing, note exactly which option. Follow-up worth doing: `#dialogueTrackList` (Ducking > Choose tracks) also uses `display:grid` and may be equally unreliable; check it and convert to flex rows if it looks wrong. **Confirmed by Dan: all checkboxes are back with the flex rows.** Documented in `research/UXP-QUIRKS.md` (section 5, "CSS `display:grid` breaks layouts").
 
-## Latest — Options tab: Clean dialogue section compacted (2026-09-21)
+## Options tab: Clean dialogue section compacted (2026-09-21)
 
 The Options > Clean dialogue block was a long, sparse column (one checkbox per row plus three explanatory paragraphs). `plugin/index.html`: the eight checkboxes (Selected clips only, Neural cleanup, Process in place, Mix on timeline, Level/limit & de-ess, De-click, Extract ambience, Extract music) now sit in a two-column `.check-grid`, with shorter labels; the long explanations (Mix on timeline, post-processing, de-click) moved into each label's `title` tooltip, leaving only `#repairHelp` (shown when De-click is on) and `#modeHelp`. All element ids are unchanged, so no JS changes. `plugin/style.css`: Options-tab labels/notes/fields get tighter margins and 26 px controls (was 30), scoped to `#tabOptions`. Old `.inline-options` markup is gone (rule left unused). Not confirmed live: check that the two-column grid renders in UXP (the ducking track list already uses `display:grid`, so it should), that long labels don't clip at the narrowest panel width, and that hover tooltips show on labels.
 
-## Latest — Normalize music levels is step 5; Extract ambience back to grey (2026-09-21)
+## Normalize music levels is step 5; Extract ambience back to grey (2026-09-21)
 
 `plugin/index.html`: the Normalize music levels button is labelled "5. Normalize music levels" with a new `.step5` colour (`#3d8f9a`, `plugin/style.css`) instead of step 4's orange (layout unchanged: still shares a row with Enhance low end). Extract ambience switched from `step step4` to `step secondary` (grey). No JS change. Known unrelated test failures: `tests/panel-help.test.cjs` (`#openDestinationFolder` has `title=""` in markup, set at runtime) and 7 `tests/settings-file.test.cjs` cases ("Cannot read properties of undefined (reading 'checked')" standalone). Not confirmed live.
 
-## Latest — Ambience stem default target -30 -> -18 dBFS (2026-09-21)
+## Ambience stem default target -30 -> -18 dBFS (2026-09-21)
 
 Dan asked for the ambience stem default level to be -18. Changed the factory default in `plugin/defaults.json` (`effects.target`), the `#effects` field default in `plugin/index.html`, and the Reset-defaults status text in `plugin/main.js`. Panel-only. A previously remembered value (auto-saved settings or a loaded settings file) is kept until "Reset defaults" / "Reset all settings to defaults". Not confirmed live.
 
-## Latest — "resource busy or locked" when re-cleaning a clip already on the timeline (2026-09-21)
+## "resource busy or locked" when re-cleaning a clip already on the timeline (2026-09-21)
 
 Dan's Copy report: Step 2 (Clean audio) failed on the last write of a clip, after the job reached 100 %, with `resource busy or locked` from `clip-batch.js processBatch` (`file.write`). Cause: stem files are named `<clip.id>-<stem>.wav` and the clips folder is now stable per sequence, so re-processing the same clip (same id, e.g. after changing settings) overwrote the stem that an earlier Step 3 had imported and placed on the timeline; Windows won't overwrite a file Premiere holds open. Fix (`plugin/clip-batch.js`): new `writeStem()` tries the overwrite and, on a busy/locked/permission error only, writes `<id>-<stem>-<base36 time>.wav` instead; the manifest already records the real path so Apply follows it, and the reuse check now looks up the file name recorded in the manifest rather than assuming `<id>-<stem>.wav` (otherwise it would reuse the stale locked file). Tests: two new cases in `tests/clip-batch.test.cjs` (locked file gets suffixed name; unrelated write errors still throw); 14/14 pass. Not confirmed live. Side effects to know: locked originals stay in the folder (delete them by hand once unreferenced). Same class of risk may exist for other fixed-name overwrites (`<id>-input.wav` exports are not imported so are fine; Fix a pop / Enhance low end / Extract ambience use unique names). Also added to UXP-QUIRKS.md.
 
-## Latest — Fix a pop is now standalone (2026-09-21)
+## Fix a pop is now standalone (2026-09-21)
 
 Fix a pop was greyed out whenever there was no *applied* Clean dialogue batch in
 the current panel session (after a panel reload, while a new Prepare was in
@@ -1083,7 +1125,7 @@ error asking to mute/disable the others. **Update:** it now requires exactly one
 `button-state.test.cjs`. Both files pass locally (28/28); full suite not run.
 Not confirmed live yet.
 
-## Latest — Panel still showing the old "?" buttons after the tooltip change: likely a stale UXP load, unresolved (2026-09-21)
+## Panel still showing the old "?" buttons after the tooltip change: likely a stale UXP load, unresolved (2026-09-21)
 
 After the "?" popover removal below, Dan reports the panel still shows the
 old "?" buttons, and only "Normalize music levels" tooltip works on hover
@@ -1124,7 +1166,7 @@ fixes it, or to describe exactly how the panel is currently loaded (UDT
 live folder vs. a packaged install) so the next step can be targeted
 instead of guessed.
 
-## Latest — "?" help popovers replaced with plain button tooltips (2026-09-21)
+## "?" help popovers replaced with plain button tooltips (2026-09-21)
 
 The new Extract ambience "?" toggle turned out oversized and looked
 greyed-out: it was a direct child of a `.step-row`, so it picked up the
@@ -1156,7 +1198,7 @@ any row visually different from before (Fix a pop and Enhance low end each
 now share a `.step-row` directly with their neighboring step button instead
 of being wrapped alongside a "?" button).
 
-## Latest — Extract ambience: standalone step (2026-09-21)
+## Extract ambience: standalone step (2026-09-21)
 
 Dan asked for an "extract ambience" button: same background separation as
 the existing Ambience stem checkbox, but its own optional step above Verify
@@ -1198,7 +1240,7 @@ track sensibly (it currently always adds a fresh track per run rather than
 finding an existing "Ambience" track — worth deciding if that's the wanted
 behavior or a follow-up fix).
 
-## Latest — Model mix slider and Update mix removed (2026-09-21)
+## Model mix slider and Update mix removed (2026-09-21)
 
 Dan asked to remove the "Model mix" slider next to step 2 (Clean audio), then
 flagged that Update mix needed to go with it since it read from that same
@@ -1254,25 +1296,25 @@ All entries below were written to Dan's checkout as they were made; each has its
 
 **Open acceptance list for Dan, in priority order:** (1) re-run the 158-clip batch — steps 1–2 should be near-instant on reuse and step 3 should show phase progress; (2) duck against Clean dialogue after a reload or on a second batch without switching to Choose tracks; (3) Mix on timeline null test at 50 %; (4) Verify loudness once more to confirm a single progress bar and that markers appear on the sequence.
 
-## Latest — The muting Amplify is labelled via the clip name (2026-09-18)
+## The muting Amplify is labelled via the clip name (2026-09-18)
 
 Dan asked for the Amplify that mutes a raw clip to be named "mute" so it's obvious. Premiere's API can't rename an effect (`Component` exposes only `getDisplayName()`; Adobe's reference has no setter, and Effect Controls can't rename one by hand either). So the raw *clip* is renamed instead: `setClipGains()` accepts an optional `suffix` per entry and, in the same transaction as the gain, appends it to the track item's name if not already present — ` · WTV muted` for the −96 dB silence, ` · WTV mix` for a timeline-mix raw clip. Never stacked (Update mix leaves the name alone), and Undo removes name and effect together. Because that changes what `inventory()` reads back as the clip name on a later run, `stripWtvSuffix()` removes the suffix before building `stableClipId()` (so exports/results still reuse) and before the clip name is used for stem naming (no "… · WTV muted · Clean dialogue · A2"). Tests: renamed after silencing, sibling untouched, unchanged across Update mix, same id and clean name on a following Prepare. Not confirmed live — check that renaming the audio item does not also rename its linked video item (the API acts on the one track item, but this is unverified).
 
-## Latest — Dialogue reference render covers only the ducked span (2026-09-18)
+## Dialogue reference render covers only the ducked span (2026-09-18)
 
 Dan: if the dialogue changes, why re-render the entire sequence rather than the area being ducked? It now doesn't. `music-pass.js run()` computes `span` = [min music start − margin, max music end + margin] with margin = 1 s + attack + release + 200 ms hold (clamped to the sequence; a span ≥ 80 % of the sequence just renders the whole thing). `render()` takes the span, sets the analysis clone's in/out points (`createSetInPointAction`/`createSetOutPointAction`, the same calls per-clip export uses live) and exports with `exportFull: false`; `readSummary` validates against the span length, then `padSummary()` places the 20 ms blocks at the timeline offset inside a silent full-length summary, so `analyze()` and clip-relative keyframe mapping are untouched. Cache: the fingerprint now carries the span (`'full'` or `[start,end]`); a sub-span run first looks for its own entry, then for a whole-sequence entry (which covers it). `timing.renders.dialogue.span` reports `'full'` or the span. Hosts without in/out actions fall back to the full render. Tests: `padSummary` placement; a 1320 s mock sequence with one 600–610 s music clip exports a ~26 s span (in/out on the clone verified, `exportFull=false`), detects the dialogue inside it and writes keyframes; a whole-sequence run then serves a later sub-span from cache with no render. That test also caught a real bug in the first cut (`music[].start` is a plain number in `describe()`, not a TickTime — the span came out NaN and silently fell back to full). Suite 243/1 remotely (the 1 is the preset fixture). Not confirmed live.
 
-## Latest — Dialogue analysis cache keyed on the dialogue, not the music selection (2026-09-18)
+## Dialogue analysis cache keyed on the dialogue, not the music selection (2026-09-18)
 
 Dan ducked the whole sequence, then re-ran on one clip: the panel re-exported all 22 minutes of dialogue reference (`render_dialogue 16 s`, `analysis_cache: miss`) although nothing about the dialogue had changed. The cache fingerprint (`music-analysis-cache.js buildFingerprint`) took `passSignature` = `musicPassSignature(sequence, music, dialogue)`, which covers the *music* lanes too — so any different music selection (or the first pass's own Amplify keyframes changing the music lanes' state) produced a new key. The dialogue reference render depends only on the dialogue lanes (clips/trims/mute) and the dialogue clips' effects, so the key now uses `JSON.stringify([musicPassSignature(sequence, [], dialogue), dialogueBefore])` (per-clip effect snapshots of the dialogue). Everything else in the key (duck settings that affect analysis, reference choice, rate/channels/duration, preset, strip-volume flag) is unchanged, as are all the guards that run after a hit. Side fix: `packFloat64Array` now accepts plain arrays (the parity fixture stores levels as arrays, which made every cache round-trip in tests fail silently to a miss). Test: a second run with a different music selection reports `analysis_cache: hit` and performs no second render. Not yet confirmed live; on Dan's sequence the next 1-clip duck after a full pass should skip "Dialogue reference · exporting" entirely.
 
-## Latest — Ducking's "Clean dialogue" reference no longer depends on the session (2026-09-18)
+## Ducking's "Clean dialogue" reference no longer depends on the session (2026-09-18)
 
 Dan: "ducking often loses track of what is clean dialogue and I have to revert to Choose tracks." Cause: `music-pass.js reference()` in clean mode matched clips only against `context.dialoguePaths` — the exact media paths inserted by the *current* panel session. That set is empty or incomplete after a panel reload (in-place runs can't be resumed), after a second batch on the same sequence (the context is replaced), and always for the offline music-only context (`dialoguePaths: []`). Fix: new `isCleanDialogueClip(entry, paths)` accepts the session paths **or** any of the durable markers every WTV stem already carries: media file name matching `*-dialogue.wav` (per-clip `<id>-dialogue.wav` and full-sequence `<jobId>-dialogue.wav`), track item name containing "Clean dialogue" (per-clip names items `… · Clean dialogue · A#`), or the track's own name containing "Clean dialogue" (full-sequence lanes). `per-clip.js inventory()` now records `trackName` per entry for that last check. Enabled/unmuted gating, Choose tracks mode, and the per-sequence saved choice are unchanged. Test added (each marker alone is sufficient; a raw clip merely named "dialogue" is not).
 
 Also this pass: the local test copy was missing `validation/music-local-parity.json` (staged now), which is why 59 music-pass/loudness tests had been failing here all along — the plugin was fine. With it present, the earlier `listSequences` change surfaced a real fragility: music-pass.js, deplosive.js and lowend.js called `host.listSequences` unconditionally, which the test's stub host lacks; each now has a `safeSequences()` fallback to a filtered `project.getSequences()`. **Suite: 242 pass, 1 fail** (export-presets needs the bundled `.epr` files, which are too deeply nested to stage). Not confirmed live.
 
-## Latest — Add clean tracks looked frozen on 158 clips; export/result reuse across runs (2026-09-17)
+## Add clean tracks looked frozen on 158 clips; export/result reuse across runs (2026-09-17)
 
 **Frozen step 3.** After Clean audio finished ("158 processed clips are ready") the Run 1–3 handler went straight into Add clean tracks with no status output and every button greyed (busy is correct while it runs; there was simply nothing being said). Two things made it slow enough to look hung: `validateOutputs` read every processed stem in full (158 whole-file reads) and, in place, each partial-lane raw clip was silenced one at a time — three transactions plus three track walks per clip on a ~300-item lane. Changes: `clip-batch.js validateOutputs(context, binary, {io, say})` reads only the WAV header per stem when `io` (fs) is passed, with a running count in the status line; `per-clip.js` gained `indexTrackItems(sequence, lanes)` (one walk per lane → Map by timeline key and by `${lane}:${sourceId}`) and `setClipGains(project, context, entries, {say})`, a batched version of the Amplify setter: three phases (append missing / set Left+Right / read back), each one index build and at most one transaction for the whole batch. `silenceRawClips()` and `applyMixGains()` use it; `setClipGain` (single) delegates to it. `apply(context, {say})` now reports every phase (checking, importing N, placing lane i/j, verifying, crossfades, muting/silencing, gain phases); the lane loop takes one `inventory(sequence, {tracks: lanes})` instead of a full inventory per lane; `validate()` with a sequence uses the index instead of a per-clip track walk. main.js passes `say` through Apply and Update mix.
 
@@ -1280,7 +1322,7 @@ Also this pass: the local test copy was missing `validation/music-local-parity.j
 
 Validation: per-clip tests for stable ids across selections and for one add + one set transaction across a partial lane; suite 181 pass, same 59 pre-existing failures. **Not confirmed live.** If Dan's current batch (158 processed, manifest state `ready` in the folder) is re-run with the same selection and settings, step 1 and step 2 should both be near-instant and step 3 should now show progress.
 
-## Latest — Prepare exports efficiency (2026-09-17)
+## Prepare exports efficiency (2026-09-17)
 
 Dan asked for an efficiency check of step 1. Per exported clip the loop was doing work that scaled with the *sequence*, not the clip: a full-sequence fingerprint (`assertUnchanged`, ~8 API calls per timeline item, every clip → O(clips²)); a full render fingerprint after every clip although only the last is ever compared; disabling every clip on the render per export (N actions); a full render inventory to find one clip; reading the entire WAV into memory on every 200 ms poll of `waitForStableWav` (hundreds of MB for a 30-minute clip); and, on a multicam source, walking every project bin several times per clip to re-fetch the unlisted render clone. Changes, none of which alter what is exported or where it is placed:
 
@@ -1292,7 +1334,7 @@ Live result: 114 of 158 clips exported at roughly one per second on the multicam
 
 Validation: new per-clip test (one `assertUnchanged` across a 3-clip batch, zero render signatures until `sealRender`, render left isolated on exactly the last clip, original untouched, unsealed batch refused). Suite 180 pass, same 59 pre-existing failures. **Not confirmed live.** Watch for: the incremental isolate on a real host (the 2026-09-14 in/out-point misfire retry still wraps it), and `require('fs').lstat/open/read` on the export WAV path from main.js (the loudness pass already uses the same calls successfully).
 
-## Latest — Verify loudness: flag every peak over a level, with sequence markers (2026-09-17)
+## Verify loudness: flag every peak over a level, with sequence markers (2026-09-17)
 
 `loudness-meter.js` `createMeter(channels, {peakFlagDbfs=-6, mergeSeconds=2})` now records **every** sample above the flag level as an event (start, end, loudest sample + its position/channel, samples over), not just the single loudest sample. Hits within `mergeSeconds` of the previous event's last hit fold into it, so a hot passage or a clipped burst is one flag at its first sample. Capped at 500 events (`over_threshold_truncated`). Result adds `over_threshold_dbfs`, `over_threshold_merge_seconds`, `over_threshold_events[]`, `over_threshold_count`, `over_threshold_truncated`; everything that was there before is unchanged.
 
@@ -1309,7 +1351,7 @@ Live follow-up: Dan saw two progress bars after the export -- the stream reached
 Validation: new `tests/loudness-peaks.test.cjs` (5 tests: multi-event detection with per-event loudest tracking, merge-window boundary and sustained passage, configurable threshold/window, 500 cap, marker add/replace/no-API). Suite 175 pass, same 59 pre-existing failures. **Not confirmed live**: the Markers API call shape (Adobe docs it exactly as used; if `createAddMarkerAction` rejects `TIME_ZERO` as a duration, try `createWithSeconds(0)`), and that markers appear on the sequence rather than the clip.
 
 
-## Latest — "Mix on timeline" (2026-09-17)
+## "Mix on timeline" (2026-09-17)
 
 New Options > Clean dialogue checkbox **Mix on timeline** (off by default; per-clip mode only; remembered via settings-file). When on, the service renders the neural output at **100% wet** (`main.js settings()` overrides `enhancer_wet`), and at Add clean tracks the raw clip and its Clean dialogue stem *both stay audible*, each with a native Amplify whose static gain makes them sum to the mix slider: raw = `20·log10(1−w)` dB, clean = `20·log10(w)` dB, floored at Amplify's −96 dB (so 100% = today's raw-silenced behavior, 0% = clean silenced). No lane mute, no disable in this mode. A new **Update mix** button (beside step 3, enabled only after an applied timeline-mix batch) re-reads the slider and rewrites the two Amplify values per clip — no export, upload or service call. Slider label reads "Timeline mix · N%" while the checkbox is on.
 
@@ -1320,7 +1362,7 @@ Code: `per-clip.js` — `silenceRawClip()` generalized into `setClipGain(project
 Validation: `mixGains` math, a full timeline-mix apply (full lane not muted, raw clips not disabled, raw −12.04 dB / clean −2.50 dB at 75%, stems located, Update mix to 30% then 100% rewrites the same components without stacking, refuses on a non-applied context), plus the off-grid in-point test. Suite: 170 pass, same 59 pre-existing failures. **Not confirmed live.** First acceptance step should be a **null test**: set 50%, run 1–3 with Mix on timeline, then temporarily invert the raw clip's polarity in Premiere — if the model is latency-free and placement is sample-aligned, the sum should be much quieter than either half; if it flanges, paste the report and treat timeline mix as unusable until alignment is fixed. Also unverified: `AudioFilterFactory.createComponentByDisplayName` on the imported *stem* clip (same API as raw/music clips). Note the timeline mix and the service mix are not identical at intermediate values: level/limit/de-ess only touch the clean half here.
 
 
-## Latest — "Process in place" option (2026-09-17)
+## "Process in place" option (2026-09-17)
 
 Added a new Options > Clean dialogue checkbox, **Process in place (no clone)**, checked by default. When on, Prepare adds Clean dialogue/Ambience/Music tracks directly to the active sequence instead of cloning it first — no separate safety copy, no duplicate sequence in the project. Undo still works project-wide as before regardless of this setting.
 
@@ -1345,7 +1387,7 @@ Known limitation, not solved here: `resumeAppliedClone()` recovers a finished se
 Validation: added `useActive()` and in-place `applyStems()`/failure-message tests to `tests/premiere.test.cjs`, and an in-place `prepare()` test to `tests/per-clip.test.cjs` (confirms no second sequence appears in the mock project and the sequence keeps its original name after apply). Full suite re-run clean: same pre-existing ~59 unrelated failures as before this change, all new tests pass. **Not yet confirmed against real Premiere** — needs: (1) normal clone path still unaffected with the checkbox off, (2) in-place run on an ordinary top-level sequence lands tracks correctly with the name unchanged and Undo recovers cleanly, (3) in-place run while editing inside a nest (the original trigger for this feature) no longer throws and adds tracks directly to the nest, (4) a deliberately failed in-place run shows sensible "original sequence retained" messaging and Undo actually recovers. Reload plugin; no service restart; ZIP not rebuilt; version remains 0.8.0.
 
 
-## Latest — "Could not identify a unique clone" while editing inside a nest (2026-09-17)
+## "Could not identify a unique clone" while editing inside a nest (2026-09-17)
 
 Dan hit `Could not identify a unique clone; no timeline edits applied` at Prepare while the active sequence was a nested sequence (opened by stepping into a nested-sequence clip on another timeline). `cloneActive()` (`plugin/premiere.js`) and per-clip.js's `ensureRenderSequence()` both identify a freshly cloned sequence the only way UXP allows — diffing `project.getSequences()` before/after the clone transaction, since action creators don't return the object they create (same reason `importFiles()` only returns a boolean elsewhere in this codebase). **Working theory, not yet confirmed live:** if `project.getSequences()` doesn't consistently include the active sequence in its pre-clone snapshot when that sequence is a nest, the diff would see two "new" items (the nest itself, plus the real clone) instead of one, tripping this exact guard.
 
@@ -1370,22 +1412,22 @@ Most recent changes were already recorded below. This summary supersedes older h
 - VS Code was opened on the same existing `outputs` Git checkout used by Cursor (`wildtv25/Ai-Integration`, branch main). No pull, commit or push performed; preserve local changes when continuing.
 
 
-## Latest — 30-minute dialogue clips (2026-09-17)
+## 30-minute dialogue clips (2026-09-17)
 
 Raised per-clip Prepare limit from 600 to 1800 seconds inclusive, with a clear duration error. Service upload validator already had no duration ceiling; raised service MAX_BYTES and full-sequence client upload cap from 512 to 1536 MiB to accommodate 30-minute 96 kHz stereo float32 WAVs (~1.38 GB plus header). Fix-pop seed schema now permits positions through 1800 seconds. Neural workers retain their existing processing/cache behavior. Reload plugin and restart service for the larger upload cap. A boundary Prepare test covers 1800 accepted / 1800.01 rejected. Real 30-minute model processing has not been benchmarked or validated in this task.
 
 
-## Latest — Collapsible loudness options (2026-09-17)
+## Collapsible loudness options (2026-09-17)
 
 Target/tolerance/help now live under the matching Loudness verification section toggle in Options. Collapsed on each panel load and Reset all; uses shared section/keyboard handling. Main Verify loudness button unchanged. Reload plugin; no service restart.
 
 
-## Latest — Wet slider endpoint snapping workaround (2026-09-17)
+## Wet slider endpoint snapping workaround (2026-09-17)
 
 User reports HTML range control snaps between 0/100 in Premiere. Replaced it with Adobe's documented native UXP `sp-slider` (0..100, step 1), keeping the same settings ID. Input/change handlers now update only label/persistence rather than resetting disabled state during drag. Settings capture accepts numeric native widget values as well as strings. Regression covers 1/25/37/50/75/99 values and round trips. Native drag acceptance still pending; reload plugin, no service restart. Reference: https://developer.adobe.com/premiere-pro/uxp/uxp-api/reference-spectrum/spectrum-uxp-widgets/user-interface/sp-slider .
 
 
-## Latest — Model wet/dry slider (2026-09-17)
+## Model wet/dry slider (2026-09-17)
 
 Added 0-100% Model mix slider beside Clean audio (100% default), shared by GAP-URGENet/MossFormer, disabled while busy or neural cleanup is off. Main submits `enhancer_wet` (0..1) when service defaults expose it; partial wet with an old service raises an explicit restart instruction rather than a schema error. Remember/Save/Load includes modelWet; older settings files default to 100%. Full-sequence and per-clip paths both use settings(). Diagnostic report includes percentage. No live update of previously inserted clips.
 
@@ -1394,12 +1436,12 @@ Service Settings validates the new bounded field. After loading cached/new neura
 Validation: 231 JS tests; offline UI harness; 41 targeted Python tests passed, including mocked end-to-end GAP/MossFormer half-wet output and cache reuse across stem combinations, numeric bounds and exact endpoints. Full targeted Python invocation had one unrelated music-analysis assertion failure (baseline gain expected -4.9897 but measured -8.0); excluded it for the successful follow-up, not changed. Native slider/model audition pending. Restart local service, reload plugin and reconnect. Versions unchanged; ZIP not rebuilt.
 
 
-## Latest — Locate loudness sample peak (2026-09-17)
+## Locate loudness sample peak (2026-09-17)
 
 Dan confirms Verify loudness works natively (-20.2 LUFS, displayed peak 0.0 dBFS). Added first maximum sample position and 1-based channel to meter/result summary; position is HH:MM:SS.mmm **elapsed from sequence start**, not SMPTE or custom-start timecode. Copy report includes exact sample position in seconds and number of tied maximum samples across channels. Silence has no peak location. Peak level now displays 3 decimals to reduce one-decimal rounding ambiguity; a displayed 0.0 alone did not prove clipping. Existing measurements have no position history; rerun Verify loudness after reload. Tests cover known sample position/channel, ties, silence and formatting. No audio/timeline changes; native position acceptance pending.
 
 
-## Latest — Remember settings + independent loudness verification (2026-09-17)
+## Remember settings + independent loudness verification (2026-09-17)
 
 Implemented requested items 3 and 5. Main stores validated portable preferences on change under `wtv-last-settings-v1`, restores after initial DOM defaults and before normal interaction, persists explicit Load and resets, and preserves these choices across reconnect. Invalid incomplete edits retain the prior valid snapshot. Saved JSON files provide named presets. Old schema-1 files missing loudnessTarget/tolerance migrate to -24/1; other required fields remain strict. De-click now remains as explicitly remembered, instead of being forced off on reconnect. Connection and sequence-specific track storage stays separate.
 
@@ -1410,12 +1452,12 @@ New **Verify loudness** button: full audible sequence mix, independent of server
 Validation: **228 JS tests pass**. Generated 1 kHz mono -20 dBFS tone reads -23.0 LUFS both here and FFmpeg ebur128; stereo summation, silence gating and invalid samples tested. Mocked full export/read/cleanup, cancellation and timeline-change rejection tests pass. Browser harness confirms offline buttons, persisted changes and restoration in a fresh document. Native Premiere export/meter acceptance remains pending. Version remains 0.8.0; no service change or ZIP rebuild. Standard reference: https://www.itu.int/rec/R-REC-BS.1770 .
 
 
-## Latest — Save settings separator initialization fix (2026-09-17)
+## Save settings separator initialization fix (2026-09-17)
 
 User's report shows Save settings failing validation for separator before opening the save picker. Inspection found `showSettings` did not explicitly initialize that select (unlike mode/enhancer); likely an untouched UXP select returning empty despite its first HTML option. Now explicitly sets Bandit v2 during initialization/reset, and capture defaults only empty/null/undefined separator values to Bandit, the sole enabled model. Explicit unsupported values and malformed imported files remain rejected. Validation messages now distinguish saving from loading. No timeline edits or version bump; reload panel and retry Save settings. All 222 JS tests and offline UI regression pass. Native Save/Load picker acceptance still pending.
 
 
-## Latest — v0.8.0 settings files; v0.7.1 stable (2026-09-16)
+## v0.8.0 settings files; v0.7.1 stable (2026-09-16)
 
 Dan confirmed the final v0.7.1 normalization works great: both limiters bypassed, all band gains 0 dB. Record v0.7.1 as the user-confirmed stable baseline. Plugin minor version incremented to 0.8.0 (manifest, heading, diagnostic version and network troubleshooting text). Service stays at compatible 0.7.1; handshake unchanged.
 
@@ -1424,12 +1466,12 @@ Added Options > Save settings / Load settings using native UXP JSON file pickers
 All 220 JavaScript tests pass; offline UI regression also passes. Tests cover round trip, credential exclusion, malformed values/schema, and blank numeric input. ZIP not rebuilt; reload plugin for new buttons. Prior v0.7.1 native validation remains historical; settings file pickers still need native acceptance.
 
 
-## Latest — Zero band makeup gain in Normalize (2026-09-16)
+## Zero band makeup gain in Normalize (2026-09-16)
 
 User requested removal of positive band gains. Runtime Broadcast preset now sets Gain 1-4 to native 0.5 (captured 0 dB value); Peak control inherits these zero gains. Both limiters remain bypassed. Overall output gains stay -12 dB for Broadcast and 0 dB for Peak control. Original native capture JSON remains intact. Updated README, tooltip/status and rerun regression assertions. Reload plugin and rerun Normalize on selected clips to update their effects; no open timeline edits performed by this task. Automated suite: 217 tests pass. This revision has not been checked live in Premiere; no ZIP rebuild or service restart.
 
 
-## Latest — Normalize: bypass both internal limiters (2026-09-16)
+## Normalize: bypass both internal limiters (2026-09-16)
 
 Reviewed the latest two-stage revision (Broadcast -12 dB, then peak control 3:1 above -30 dB at 0 dB output). User requested limiter bypass because the result sounded louder. Both runtime presets now set `LMAX: Bypass` (index 53) to 1; the whole compressor remains enabled. This bypasses the limiter section, rather than merely changing its brickwall mode. Original `music-broadcast-preset.json` stays an untouched native capture; the runtime Broadcast copy overrides bypass before the peak preset inherits it. Existing readback verification includes bypass and rolls back on mismatch. UI tooltip/status and README describe the change.
 
@@ -1438,7 +1480,7 @@ Reload and rerun Normalize on selected music to replace existing instances; this
 Validation: all **217 JavaScript tests pass**, including limiter bypass in both stages on repeated runs, whole-effect enabled, native capture unchanged, and rejection of incorrect bypass readback. The earlier handoff's 59 suite failures do not reproduce in this run. Limiter bypass revision has not been checked live in Premiere. No service restart, version bump or ZIP rebuild.
 
 
-## Latest — Peak-control compressor added to Normalize music levels (2026-09-16)
+## Peak-control compressor added to Normalize music levels (2026-09-16)
 
 Dan asked for a second compression stage: anything louder than **-30 dB** on selected music clips should go through **3:1 compression** so it's closer to -30 dB with fewer peaks. Implemented as a second native Multiband Compressor instance, inserted **after** the existing -12 dB Broadcast stage (Dan's chosen order): Threshold 1-4 = -30 dB, Ratio 1-4 = 3:1, Output Gain = 0 dB (no added gain from this stage), same verified 105-parameter layout/match id as Broadcast.
 
@@ -1450,7 +1492,7 @@ Implementation: `plugin/normalize-music.js` (now builds `peakPreset` from `broad
 
 Validation: **5/5 new JavaScript tests pass** in `tests/normalize-music.test.cjs` (two-stage insertion/order/rerun-no-stacking, peak-stage threshold/ratio values, failed-readback rollback of both stages, unknown-layout rollback, non-audio field tolerance) plus the full existing suite re-run clean against this change (same 59 pre-existing failures present on the unmodified checkout too — confirmed by diffing a run against `outputs/WTVAudioWizard` before this patch; unrelated to this change, not investigated further here). **Not yet run against real Premiere** — the threshold/ratio math is solved from Broadcast's own confirmed-live values, but the actual audible result (and whether Premiere accepts writing all eight Threshold/Ratio params, not just Output Gain, without surprises) has not been confirmed on Dan's host. Reload the plugin and test on selected music clips with real peaks above -30 dB before considering this done — Copy report/verify() will throw rather than silently ship if the live layout or readback doesn't match, but that only catches layout/readback mismatches, not whether -30 dB/3:1 is audibly what's landing. No service restart; ZIP not rebuilt; version remains 0.7.1.
 
-## Latest — Normalize music levels (2026-09-16)
+## Normalize music levels (2026-09-16)
 
 New offline button below Conform and duck music, left of Enhance low end. User clarified scope: **selected music clips**, not all tracks. Applies native Multiband Compressor Broadcast settings with **Output Gain -12 dB**. Replaces existing Multiband Compressors on those clips, puts the compressor before the earliest Amplify, and verifies other effects/keyframes remain unchanged. No service, export, import, or source WAV changes. This is fixed compression/gain, not measured loudness normalization. Each clip is verified separately; failure attempts restoration of that clip, while completed clips remain applied.
 
@@ -1461,17 +1503,17 @@ Validation: **215 JavaScript tests pass**; offline panel browser check passes. N
 Reload plugin to pick up the new action. No server restart. Version remains 0.7.1; ZIP not rebuilt.
 
 
-## Latest — Amplify identification and fresh readback (2026-09-16)
+## Amplify identification and fresh readback (2026-09-16)
 
 Dan's native 22-minute run completed local dialogue analysis (2101 speech regions, 1706 curve points) but failed the new generic one-Amplify assertion before configuration. The old error did not include observed count/names, so the exact native cause remains unconfirmed. Corrected two weaknesses: `isAmplifyComponent` now checks the documented `getDisplayName()` for Amplify as well as the internal match-name fallback; music Apply reacquires selected clip/component-chain handles from the active timeline before replacement and after its transaction. Pre-Apply refresh also refreshes removal backups. The one-Amplify assertion remains; failure now reports track, time, expected/observed count, removal count, and every remaining effect's display/internal name. Rollback protections remain.
 
 Reference: [Adobe Component API](https://developer.adobe.com/premiere-pro/uxp/ppro-reference/classes/component) distinguishes display names from internal match names. Regression tests reproduce opaque internal IDs and a chain whose cached count remains stale after edits; **211 JS tests pass**. This does not establish which issue occurred on Dan's host. Reload and retry on one selected music clip; use the richer report if verification still fails. No service restart; ZIP not rebuilt.
 
-## Latest — stable Duck against checkboxes (2026-09-16)
+## stable Duck against checkboxes (2026-09-16)
 
 Checkbox changes now save the track selection and refresh only its validation/summary. They no longer clear/recreate every row or show a temporary loading message, preserving checkbox focus and avoiding list collapse/scroll jumps. Explicit Refresh and changing reference mode still rebuild the list. Existing revision/context guards reject stale asynchronous results. Four selector tests pass, including row identity preservation across a toggle. Reload plugin; no service restart.
 
-## Latest — Step 1 concurrent export verification and Amplify replacement (2026-09-16)
+## Step 1 concurrent export verification and Amplify replacement (2026-09-16)
 
 Step 1 (per-clip and full-sequence) now supplies a WAV verifier to `exportSequenceWithRenderWait`. Once the host export call returns, WAV checks begin immediately while EncoderManager listeners stay attached; there is no five-second event grace first. Every 200 ms the verifier checks format, complete RIFF length, rate/channels and duration, requiring two valid reads with identical byte length. Completion events never bypass verification; cancellation and user cancellation still stop the pass. Listeners are disposed on success/failure. Export-acceptance timeout timers are now cleared when the host returns, avoiding accumulated dormant timers across a batch. Other export callers without a verifier retain their existing bounded event fallback. Expected ready-file overhead is about 200 ms plus reads, versus about six seconds on the missing-event path; this is a code-derived expectation, not a native wall-time benchmark.
 
@@ -1479,7 +1521,7 @@ Music Apply now removes **all Amplify effects on selected music**, including man
 
 Validation: **209 JavaScript tests pass**, including immediate file verification with/without events, incomplete WAVs despite completion events, cancellation/listener cleanup, Step 1 verifier wiring, unrecorded/stacked Amplify replacement, unselected clip preservation, and rollback restoring effect order. Native Premiere acceptance still needed: reload plugin, test a short export batch and selected music with existing Amplify. No service restart required; ZIP not rebuilt.
 
-## Latest — EncoderManager export events + UXP backlog (2026-09-15)
+## EncoderManager export events + UXP backlog (2026-09-15)
 
 **Implemented:** `plugin/export-sync.js` listens for `EncoderManager` render events when available, then **immediately falls back to WAV polling** (3s event grace on music analysis; 5s default elsewhere). Dan's Premiere build reported `export_wait: poll` with no `EVENT_RENDER_COMPLETE` correlation — behavior matches pre-audit polling, without a long idle wait after `exportSequence` returns.
 
@@ -1498,7 +1540,7 @@ Validation: **209 JavaScript tests pass**, including immediate file verification
 
 See also [ARCHITECTURE-VALIDATION.md](research/ARCHITECTURE-VALIDATION.md) export note and [EncoderManager events](https://developer.adobe.com/premiere-pro/uxp/ppro-reference/classes/encodermanager).
 
-## Latest — music pass timing and guard performance (2026-09-15)
+## music pass timing and guard performance (2026-09-15)
 
 Step 4 now records **wall-clock timing** per phase (`collect`, `reconcile`, `prep`, three `render_*` passes, `analyze`, `apply_*`, `guard_unchanged`) plus per-render breakdown (`clone_isolate`, `export`, `wav_read`). Status and **Copy report** include `Music timing:` and `Music render breakdown:` JSON. Use this on the long clone to see whether Premiere exports dominate (expected on ~22 min sequences) or UXP guards/Apply do.
 
@@ -1508,11 +1550,11 @@ Step 4 now records **wall-clock timing** per phase (`collect`, `reconcile`, `pre
 
 **Native baseline (Dan):** reload plugin, run step 4 on the ~22 min clone (service stopped), paste Copy report. Expect most wall time in `render_music` / `render_dialogue` / `render_calibration` export sub-phases (~3× sequence realtime). **Analysis-summary cache:** when timeline mix, dialogue reference, duck settings, and export preset match a prior pass, step 4 skips the three Premiere exports and reuses stored 20 ms RMS/peak summaries from plugin data (`music-analysis-cache/`). Copy report shows `Music analysis cache: hit|miss`.
 
-## Latest — music selection auto-resolves reruns (2026-09-15)
+## music selection auto-resolves reruns (2026-09-15)
 
 The music pass no longer blocks with **“Selected music is not the same set as the previous pass.”** Each run reconciles stored ownership against the timeline (drops records whose clips or duck Amplify are gone; keeps selected clips even when Amplify was deleted so they can rebuild). Whatever music is selected is ducked or re-ducked; unselected clips that still carry a prior pass are left alone and stay in storage. Retrim or new clips replace a stray prior Amplify when exactly one is present; multiple duck Amplify effects on one clip still block. Copy report / status add `clips_updated`, `clips_fresh`, and `clips_unchanged`. Reload the plugin before retrying on a long clone.
 
-## Latest — music ducking runs offline in the plugin (2026-09-15)
+## music ducking runs offline in the plugin (2026-09-15)
 
 Dan requested the entire native music pass work without the service. Implemented: step 4, dialogue track selection, analysis, calibration and native keyframe writing now work without Connect or a pairing token. `plugin/music-analysis.js` replaces the music pass's service analysis call; `plugin/music-wav.js` reads local Premiere WAVs in bounded chunks using UXP `fs.open/read/close`, retaining only 20 ms RMS/peak summaries. No music uploads, downloads, HTTP requests or GPU/model work. Cancel during music does not send a cancellation request for an older cleanup job. The server music endpoint remains for compatibility; the plugin does not use it. Other processing still requires the service.
 
@@ -1526,7 +1568,7 @@ Validation: **194 JavaScript tests pass** (`validation/music-offline-js-tests.tx
 
 **Remaining acceptance:** reload in real Premiere with the service stopped; test Choose tracks on an ordinary sequence and Clean dialogue on a resumed clone, then audition and rerun after deleting Amplify. Local WAV access and responsiveness on Dan's 22-minute timeline still require native verification. Browser/host stand-ins cannot certify Premiere filesystem or timeline behavior. Service/model code unchanged; ZIP not rebuilt.
 
-## Latest — rerun after manually deleting Amplify (2026-09-15)
+## rerun after manually deleting Amplify (2026-09-15)
 
 Fixed `Cannot read properties of null (reading 'clips')` after successful keyframe writing. Root cause: a subset selection set `partialUpdate=true`, then missing Amplify cleared `previous`; final record merging dereferenced `previous.clips`. `plugin/music-pass.js` now keeps previous metadata immutable and resolves missing/surviving effects per selected clip. Missing effects are rebuilt; surviving owned effects are replaced; unselected clip records are retained. A different effect at the old Amplify index is no longer treated as owned when the recorded match name is absent. Completed status is emitted only after verification and ownership storage succeed. Existing unknown pending-pass protection remains.
 
@@ -1534,11 +1576,11 @@ Three regressions cover partial deletion plus repeat rerun, mixed missing/surviv
 
 Dan's supplied real-project log confirms the sparse two-endpoint calibration passed on 1320.052 seconds: median error 0.000986 dB, p95 0.002780 dB, **1708** analysis `curve_points` (from the **service** analyzer on that run). That validates calibration on this material, not a completed native pass: the later ownership-record error aborted it. New runs use **`analysis_location: plugin`** (see top section); expect similar corner counts unless analysis tuning changes.
 
-## Latest — panel/log text encoding repair (2026-09-15)
+## panel/log text encoding repair (2026-09-15)
 
 Fixed corrupted punctuation in `plugin/main.js` and `plugin/music-pass.js` (connection/resume messages, status/progress, track labels and Copy report). The corruption was present in the source literals, not generated by Premiere. Affected punctuation now uses ASCII JavaScript Unicode escapes so it renders correctly and survives tools using a Windows legacy encoding. Always read/write source files with explicit UTF-8. Reload the plugin to clear old in-memory status entries; no service restart. No audio or ducking behavior changed. Syntax checks and plugin text scan passed.
 
-## Latest — exact sparse music keyframes (2026-09-15)
+## exact sparse music keyframes (2026-09-15)
 
 Implemented the requested music ducking optimization. `plugin/music-effects.js` now writes only the analysis curve corners plus each clip's start/end sample, anchored to source in-point. Removed 0.25 dB densification and the interim 0.5–16 dB adaptive ladder. **Correction to the historical explanation below:** Amplify stores `(dB+96)/144`, an affine mapping; LINEAR interpolation of this value is linear in dB. Extra keys along a straight ramp add no information. The old claim that this mapping needs amplitude-style densification was incorrect.
 
@@ -1585,7 +1627,7 @@ This generic Premiere UXP error has recurred from several unrelated causes acros
 
 If this error recurs with none of the above as the cause, get the exact action/method being called at the moment of failure before guessing at a fifth cause.
 
-## Latest — "Export timed out" on a large batch now resumes instead of restarting (2026-09-14)
+## "Export timed out" on a large batch now resumes instead of restarting (2026-09-14)
 
 Dan hit `waitForStableWav()`'s 5-minute timeout partway through a 158-clip per-clip batch (stalled at clip 100/158, `C0036.MP4`) — Premiere had accepted the export (`manager.exportSequence()` returned) but the resulting WAV never stabilized on disk within the deadline, most likely a blocking dialog or a genuine host hang on that one clip (Premiere's own UI looked idle afterward, consistent with it having already given up). Notably it failed on exactly the **100th** export of the batch — worth flagging in case it recurs, since a round number like that is at least as consistent with some resource accumulating a limit every 100 sequential exports in the same session (e.g. a Premiere-internal handle/cache count, a media cache limit, or similar) as it is with coincidence tied to that specific source file; nothing in this plugin's own code imposes any 100-item ceiling, and no evidence yet distinguishes "100th export" from "the specific clip that happened to be 100th," so treat this as an open lead rather than a confirmed cause. If it recurs at another multiple of 100 (or always near 100 regardless of which clip lands there), that would point at Premiere itself rather than the source media.
 
@@ -1593,7 +1635,7 @@ This wasn't a code bug in the timeout itself — 5 minutes for one clip's export
 
 Fixed by making the export loop resumable: each clip now gets `clip.exportVerified = true` only after its WAV actually stabilizes (extracted into `exportPerClipBatch()` in `plugin/main.js`, which skips already-verified clips so it works identically whether called fresh or resumed). At the top of `action('prepare', ...)`, `resumableBatch()` checks whether the in-memory `context` is an interrupted-but-partially-exported per-clip batch (`context.mode === 'per_clip'`, not yet `prepared`/`applied`/`failedApply`, at least one `exportVerified` clip) on a pending clone that's still intact (`host.assertUnchanged(context)`) — pure eligibility split out as `isResumableBatchContext()` in `plugin/button-state.js` for testability (`tests/button-state.test.cjs`), the host check kept separate since it needs a live Premiere call. If eligible, it reuses the existing `context.folder`/render sequence and calls `exportPerClipBatch()` again, which only re-exports clips 100–158; otherwise it falls through to the original fresh-clone behavior unchanged. The retried clip's own file is created with `{overwrite: true}` (was `false`) since a partial file from the failed attempt may already sit at that path. No new button or UI: **Dan just clicks Prepare again** and the panel now says "Resuming batch: N/M clips already exported" instead of restarting from zero. This only applies within the same panel session — reloading the panel still loses the in-memory `context` (per-clip batches aren't currently resumable across a reload, unlike the applied-clone case `resumeAppliedClone()` already covers).
 
-## Latest — Off-grid raw clips: Premiere floors a placed stem to whole frames; per-clip now exports and places a whole-frame cover (2026-09-14)
+## Off-grid raw clips: Premiere floors a placed stem to whole frames; per-clip now exports and places a whole-frame cover (2026-09-14)
 
 The one-sample tolerance in the entry below was necessary but not sufficient. With the actual-vs-expected diagnostic in place, the next run showed exactly what Premiere did with `clip-043 "C0021.MP4"` (the same clip, renumbered after re-Prepare): expected ticks `110005685647200-118235555323200`, found `110005684588800-118227081772800` — `Δstart −1058400 ticks = −0.20 samples`, `Δend −8473550400 ticks = −1601.20 samples`, source matches, enabled. On the sequence's 29.97 grid (frame = 8475667200 ticks) that is: raw clip = frame 12979.0001 → 13949.9998 (970.9996 frames); placed stem = frame 12979 → 13949 exactly (970 frames). So `createOverwriteItemAction` **floors the start to the frame grid and floors the item's duration to whole frames**. The start snap is sub-sample and harmless; the duration floor cut one frame (33 ms) off the stem's tail. Retrying can't change that, and no sane tolerance should accept it — with the raw lane muted it would be a 33 ms hole of dialogue.
 
@@ -1616,59 +1658,59 @@ Fix in `apply()` (`plugin/per-clip.js`): start/end now verify within **one sampl
 
 Immediately after the message above shipped, it caught a second real occurrence on a *different* 42-clip batch: `clip-042 "C0021.MP4" (from A2 @ 433.07s, destination lane 5, ...)` -- the very **last** clip in the batch, on the second source track. Same shape as the confirmed export-side bug (an action commits but the readback doesn't reflect it, self-heals if you just redo it), just in the placement step instead of the isolate transaction, and again on a "boundary" item (there: first clip on a newly-touched track; here: last clip in a large lane). Given that pattern is now confirmed twice in two different code paths, `apply()`'s placement verification (`plugin/per-clip.js`) now retries the same way the export isolate step does: instead of one check at the end that throws immediately, it loops up to 3 attempts, and on a miss it re-issues **only the mismatched addition(s)' own `createOverwriteItemAction`** (a "WTV: retry stem placement" transaction) before re-checking, with a 300ms pause between attempts. Only throws (`Stem placement verification failed after retrying: ...`) if 3 attempts are exhausted. This means an isolated flaky placement on one clip out of 40+ should now self-heal in under a second instead of discarding the whole batch and needing a full re-Prepare/re-export. Covered by two new regression tests in `tests/per-clip.test.cjs`: one confirms a transient single miss (matching what was actually observed live) self-heals and `apply()` completes normally; the other (updating the pre-existing "partial insertion failure" recovery test, which the retry logic incidentally "fixed" since its old one-time sabotage no longer survives a retry) confirms a *persistent* failure still exhausts all 3 attempts and correctly falls through to the existing mute-recovery/`failedApply` path.
 
-## Latest — "Stem placement verification failed" now names which clip (2026-09-14)
+## "Stem placement verification failed" now names which clip (2026-09-14)
 
 Dan hit a bare `Stem placement verification failed` on a 42-clip Apply with no lead on which clip out of 42 (several sharing source files) actually failed. The check in `apply()` (`plugin/per-clip.js`) already knew exactly which addition(s) didn't verify — it just discarded that and threw a generic message. Now it reports each failing addition by **its own clip id**, source track, timeline position, and expected tick range, e.g. `Stem placement verification failed: clip-014 "C0036.MP4" (from A2 @ 363.10s, destination lane 4, expected ticks 92122026796800-93215387865600)`. Deliberately uses the clip's own `id`/timeline position rather than just its display name — confirmed while writing the regression test that the display name alone is the *source* clip's name (assigned by `createSetNameAction` before placement, e.g. `"C0036.MP4"`) and is **not unique** across clips that share a source file, which is exactly the kind of batch where this error tends to show up. Covered by a new regression test in `tests/per-clip.test.cjs` that sabotages one specific placement's target time and asserts the resulting message names that clip's own id. Still requires "Prepare a new batch" to retry (per `apply()`'s existing `context.failedApply` guard) — this only makes the failure diagnosable, not itself retryable; the exported/cleaned WAVs for the other 41 clips aren't affected either way.
 
-## Latest — Root cause confirmed and fixed: retry the isolate transaction in place (2026-09-14)
+## Root cause confirmed and fixed: retry the isolate transaction in place (2026-09-14)
 
 The diagnostic guard below caught it on the next run, instantly instead of after a 5-minute stall: `Render in/out points did not take effect for "C0036.MP4" (expected 92122026796800-93215387865600, got -101606400000000000-93215387865600)`. That "got" in-point is exactly **-400000 seconds** (`-101606400000000000 / 254016000000`) — a nonsensical sentinel-looking value, not merely "stuck at the previous clip's position" — while the out-point applied correctly. Clicking Prepare again (which the earlier resume fix picked up automatically) re-ran the exact same isolate transaction on the exact same clip a few seconds later and it succeeded immediately. Dan noticed the pattern: **this was the first clip encountered on track A2 after 36 consecutive clips on A1** — i.e. `render.createSetInPointAction()` (or the readback `render.getInPoint()`) appears to misfire specifically the first time an export touches a *different* audio track than every export before it in the batch, not something particular to that clip's media or its leading gap. Confirmed real, transient, self-healing host behavior — not a bug in this plugin's own logic, and not fixable by changing what values are passed in.
 
 Since retrying the identical transaction reliably works, `exportClip()` in `plugin/per-clip.js` now retries in place automatically: the isolate transaction + in/out readback + verification (previously the diagnostic guard added just above) is now `isolateClipOnRender()`, which retries up to 3 attempts with a 300ms pause between, only throwing (`... after 3 attempts`) if every attempt misses. This means the track-switch glitch should now self-heal within about half a second, invisibly, with no manual "click Prepare again" needed. If it ever does exhaust all 3 attempts, the earlier resume-on-failure behavior (clicking Prepare again) remains the fallback. Also, per Dan's suggestion, the Prepare button's own label now reflects that state: `button-state.js`'s `computeButtonState()` gained a `prepareLabel` field (`"1. Resume export"` instead of `"1. Prepare exports"` when `isResumableBatchContext()` is true) and a matching hint (`"Export was interrupted (N/M clips already done). Click Resume export to continue."`), wired into `main.js`'s `updateActions()` (`$('prepare').textContent = state.prepareLabel`). Covered by two new regression tests in `tests/per-clip.test.cjs` (exhausts all 3 attempts and throws; misses once then succeeds on retry) — the sandboxed test harness (`vm.runInNewContext`) needed `setTimeout` added to its box since the retry's pause uses it and the sandbox doesn't inherit Node's globals.
 
-## Latest — Diagnostic guard: verify render in/out points actually took effect before exporting (2026-09-14, unconfirmed root cause)
+## Diagnostic guard: verify render in/out points actually took effect before exporting (2026-09-14, unconfirmed root cause)
 
 Follow-up to the "Export timed out" investigation: Dan noticed the clip that stalled (`C0036.MP4`, first clip on its track, ~6 min after a long leading gap) produced a **60MB WAV for a 6–7 second clip** — 20x+ too large for any sane rate/format, implying Premiere actually exported something like 5–6 minutes of audio, not the isolated clip. That's consistent with `exportClip()`'s isolate transaction (`render.createSetInPointAction(target.start)` / `createSetOutPointAction(target.end)`) **silently not taking effect** for that specific clip, so the render sequence exported from wherever its in-point was actually left (matching the gap) through to the correct out point — producing a huge, wrong-duration file that can never satisfy `waitForStableWav`'s duration check, and so times out after 5 minutes looking exactly like a hang, when Premiere had actually already finished (with the wrong output).
 
 **This is not yet confirmed** — it's the most numerically-consistent explanation found so far, not a proven root cause. Added a fast-failing guard rather than a fix: right after `exportClip()` reads the render's in/out points back (previously stored unchecked in `clip.renderInTicks`/`renderOutTicks`), it now compares them against `target.start`/`target.end` and throws immediately (`Render in/out points did not take effect for "<clip>" (expected X-Y, got A-B). Prepare a new batch.`) if they don't match, instead of proceeding to export. If the theory is right, the next run against `C0036.MP4` should fail **instantly** with this new error instead of stalling for 5 minutes — which would confirm the cause and open the door to an actual fix (e.g. re-fetching `render` again before setting the points, or retrying the transaction). If it *doesn't* throw and the export still stalls, the theory is wrong and the search continues elsewhere. Covered by a new regression test in `tests/per-clip.test.cjs` that stubs the render's set-point actions as no-ops and confirms `exportClip()` now fails fast with this message instead of silently exporting the wrong span.
 
-## Latest — Removed the per-batch clip count cap entirely (2026-09-14)
+## Removed the per-batch clip count cap entirely (2026-09-14)
 
 Following the "100th export stalls, then resumes fine" investigation below, Dan asked to remove `MAX_CLIPS_PER_BATCH` (250) entirely rather than raise it further, since it's just a defensive sanity check with no evidence it maps to any real constraint — confirmed this session that our own code never counted or gated on a running export tally anywhere, and 250 was picked somewhat arbitrarily when it was raised from 100 earlier. Removed the constant, the `enabled.length > MAX_CLIPS_PER_BATCH` check, and its error message from `validate()` in `plugin/per-clip.js`. `PER-CLIP-MODE.md` updated to say there's no cap. Individual per-clip duration (600s) is unrelated and untouched.
 
-## Latest — Export status now identifies which occurrence of a repeated source file (2026-09-14)
+## Export status now identifies which occurrence of a repeated source file (2026-09-14)
 
 Following the "Export timed out" resume fix above, Dan asked for enough detail in the export status to identify exactly *which* timeline occurrence of a repeatedly-used source file (e.g. `C0036.MP4` appearing dozens of times across a 158-clip batch) stalled, so he could test that specific one in isolation rather than guessing among all the `C0036.MP4` instances. `plugin/main.js`'s `exportPerClipBatch()` now appends the clip's timeline location to every "Export"/"Waiting for export" status line and to the "Export timed out"/cancellation error itself, via a new `clipLocation(clip)` helper (`A<trackIndex+1> @ <mm:ss or h:mm:ss>`, e.g. `A2 @ 12:07`) built from `clip.trackIndex`/`clip.start.seconds` (already captured at Prepare-time inventory, no new host calls needed). So a stall now reads e.g. `Waiting for export 100/158 · C0036.MP4 · A2 @ 12:07`, and if it times out the error itself repeats that same location, both in the live Status line and in the log history — enough to jump to that exact spot on the clone/render sequence, or re-select just that one clip for an isolated test.
 
-## Latest — Music target default changed to Peak (2026-09-14)
+## Music target default changed to Peak (2026-09-14)
 
 Dan asked to make **Peak** the default for the ducking "Target counts as" setting (was RMS). Changed the default in `service/music.py`'s `MusicAnalysis.target_mode` (`'rms'` → `'peak'`), `plugin/index.html`'s `musicTargetMode` select (`peak` option now first/`selected`), and the panel's own fallback in `plugin/main.js` (`optionsUi.musicTargetMode === 'rms' ? 'rms' : 'peak'`, was the inverse) so a panel with no saved preference yet defaults to Peak too. Existing saved panel preferences (`optionsUi.musicTargetMode`) are untouched — this only changes what a *fresh* install/preference-less panel starts on. `tests/test_music.py`'s `test_rms_target_and_silent_dialogue` now passes `target_mode='rms'` explicitly since it was relying on the old implicit default to test RMS-specific numbers.
 
-## Latest — Prepare re-enables after a finished batch (2026-09-14)
+## Prepare re-enables after a finished batch (2026-09-14)
 
 Dan reported that after running steps 1–3 to completion (`context.applied === true`), every step 1–3 button stayed disabled, blocking selecting a different clip and running Prepare again — only step 4/Fix a pop/Enhance low end remained usable. Root cause: `updateActions()`'s `prepareDone` in `plugin/main.js` was `Boolean(context && !context.failedApply && (context.prepared || context.exportPath))`, which only turned false again on a *failed* apply (`context.failedApply`), never on a *successful* one — `context.prepared` stays true forever on the finished context, so `prepare` stayed disabled indefinitely once a batch succeeded. Fixed by also excluding `context.applied` from `prepareDone`, matching the already-correct failed-apply behavior: `Boolean(context && !context.failedApply && !context.applied && (context.prepared || context.exportPath))`. Clicking **Prepare** was already safe to call again in this state — `action('prepare', ...)` unconditionally resets `context`/`jobId`/`jobResult` and clones the currently active sequence fresh — so no change was needed there, only to the button-gating condition. The just-finished clone/tracks are untouched by this; only the panel's in-memory reference to that batch moves to the new one (the same tradeoff `resumeAppliedClone()` already accepts). The "Steps 1–3" section stays collapsed after a successful apply as before; click its header to expand and see the now-enabled Prepare button. A full DOM-harness test for `main.js` wasn't worth it — it `require`s the real `uxp` module and `document` directly at module scope and wires ~30 event listeners at load time, unlike `premiere.js`/`per-clip.js`/`dialogue-selector.js`, which take their host/DOM dependencies as function arguments and were built to be tested this way from the start. Instead, the pure gating logic (`prepareDone`/`processDone`/`applyDone`, the resulting `disabled` values, and `mainHint` text) was extracted into `plugin/button-state.js`'s `computeButtonState()` — no DOM, no `uxp` — and `main.js`'s `updateActions()` now just calls it and assigns the results. Covered by `tests/button-state.test.cjs`, including the exact regression (successful apply must re-enable Prepare, matching the already-correct failed-apply case).
 
-## Latest — "Cannot read properties of null (reading 'getStartTime')" on a second per-clip batch (2026-09-14)
+## "Cannot read properties of null (reading 'getStartTime')" on a second per-clip batch (2026-09-14)
 
 Dan hit this running a *second* per-clip batch in the same panel session — the first batch (4 clips, gap_urgenet) completed and its music was ducked successfully; then he selected a different clip (C0028.MP4, mossformer2) and used the "Prepare re-enables after a finished batch" behavior (see the entry below) to start a fresh batch, which failed at Apply. Root cause: `signature()` in `plugin/premiere.js` calls `track.getTrackItems(TrackItemType.CLIP, false)` and then unconditionally calls `.getStartTime()` on every returned item — but real Premiere hosts have been observed to include `null` placeholder entries for **gap regions** even when `includeEmptyTrackItems` is explicitly `false` (confirmed against community reports of the same Adobe API; `false` is documented as excluding those placeholders, but doesn't reliably in practice). This had never surfaced before because it needs a track with a real gap on it, and the first per-clip batch to hit it was the **stem lanes this plugin itself adds** — a "Clean dialogue" lane only covers the timeline spans of the clips it actually replaced, so it necessarily has gaps before/between/after them. `assertUnchanged()` (called at the top of every step, including the second batch's own Apply) scans *all* tracks via `signature()`, so the first batch's own added lane could crash a completely unrelated, later batch.
 
 Fixed by a single defensive helper, `clipTrackItems(track, type)` in `plugin/premiere.js`, that filters out any falsy entries after calling `getTrackItems()`, and replaced every direct `track.getTrackItems(...)` call across `plugin/premiere.js` and `plugin/per-clip.js` (7 call sites, both `CLIP` and `TRANSITION` types) with it, rather than patching `signature()` alone — the same host quirk could otherwise resurface in `inventory()`, `captureAudioCrossfadePlan()`, `stripAudioTransitions()`, `reapplyDialogueCrossfades()`, `findClipTrackItem()`, `firstReusableTrackIndex()`, `audioSnapshot()`/`videoSnapshot()`, all of which iterate the same kind of array. Covered by a new regression test in `tests/per-clip.test.cjs` that pushes a `null` into a mocked track's clip list and confirms `apply()` still completes (verified it fails without the fix, passes with it).
 
-## Latest — "Stem placement verification failed" on an 8-clip batch, then "Illegal parameter type" (2026-09-14)
+## "Stem placement verification failed" on an 8-clip batch, then "Illegal parameter type" (2026-09-14)
 
 Dan hit "Stem placement verification failed" on a real 8-clip per-clip batch (5 of the 8 clips from the same source file, `C0057.MP4`, on one track — a heavily-cut single-camera edit) right at Apply, after Prepare/Clean both succeeded. Root cause: `plugin/per-clip.js`'s `timelineTime()` (used to position each new stem clip on its lane) and the stem's `createSetInOutPointsAction` span both reconstructed a `TickTime` from the recorded `.seconds` value via `createWithSeconds()`, discarding the exact `.ticks` value already captured for that same clip at Prepare time. Premiere's ticks-per-second (254016000000) isn't a power of two, so ticks → seconds → ticks is a lossy round trip that can land 1 tick off the original position — normally invisible, but `apply()`'s placement verification compares exact tick strings, so a single tick of drift throws `Stem placement verification failed` even though nothing is actually wrong with the timeline. First fix: prefer `ppro.TickTime.createWithTicks()` in both spots, falling back to `createWithSeconds` only if `createWithTicks` isn't available.
 
 That first fix immediately surfaced a second, real-host-only bug: **`createWithTicks(ticks)` throws `Illegal parameter type` if `ticks` is a `Number` instead of a `string`** — confirmed against [Adobe's own TickTime reference](https://developer.adobe.com/premiere-pro/uxp/ppro-reference/classes/ticktime/) (`createWithTicks(ticks: string): TickTime`), which the first fix got wrong by wrapping the ticks value in `Number(...)` before passing it. `plugin/premiere.js`'s pre-existing `addAudioCrossfade()` had the exact same bug (`createWithTicks(Number(entry.durationTicks))`) — never caught before because no test mocked `createWithTicks` strictly enough to notice, and because a failure there is caught per-boundary and only shows up in `context.crossfadeReport`, never breaking Apply outright. Both fixed to pass the already-string `.ticks` value through directly (converting a numeric ticks delta back to a string first where one is computed). The `tests/per-clip.test.cjs` mock's `createWithTicks` now throws the same `Illegal parameter type` error if ever called with a non-string, so this exact class of bug can't silently pass again.
 
-## Latest — Clean audio progress bar jumped to 81% immediately, then stalled (2026-09-14)
+## Clean audio progress bar jumped to 81% immediately, then stalled (2026-09-14)
 
 Dan reported that during the Clean audio (step 2) progress bar, it "immediately jumps to 81% complete then stays there then finishes." Root cause: `service/app.py`'s `run_job()` set `progress=81` right *before* calling the dialogue cleanup worker (`run_worker()` running GAP-URGENet/MossFormer2) — the single dominant cost of the whole job, often the majority of total wall time — with no incremental progress from that subprocess itself (just a start and an end). So the number reported "81% done" the instant the slowest step began, before any of its work had actually happened, then had nothing to report until it returned, at which point the remaining fast stages (compress/de-ess/de-click/mix) blew through 86→91→93→95→100 almost immediately. Fixed by moving that stage's reported progress to a low value (`15`) when the worker starts, and only advancing it (`80`) once the worker actually returns — same jump-then-fast-finish shape underneath (there's still no way to get real incremental progress out of that subprocess), but now the bar sits at a low, honest-looking number for the long wait instead of an almost-done one. No test asserted the specific literal progress values, so nothing needed updating beyond the two `update()` call sites.
 
-## Latest — dialogue dynamics chain (2026-09-11)
+## dialogue dynamics chain (2026-09-11)
 
 Dan confirmed the **breathy C/S fix** works on real material. Clean audio now runs by default, after the enhancer and before mix:
 
-## Latest — dialogue leveling v4 + sparse whisper lift (2026-09-15)
+## dialogue leveling v4 + sparse whisper lift (2026-09-15)
 
 Clean audio now levels whisper-heavy clips toward mixed-dialogue loudness without a separate panel control. **`dialogue-multiband-peak-v4`** (`service/compressor.py`): lower quiet-block floor (−54 dBFS), body band uses RMS-assisted drive, honors full `max_boost_db` from job settings. **`normalize_sparse_dialogue()`** runs immediately after compression when peak minus active RMS ≥ 18 dB (C0021-class sparse clips): tames outlier spikes, lifts active RMS toward Dialogue target − 13 dB (≈ −25 dBFS at default −12 peak target), sample-clips at peak target instead of global gain-down (so whisper lift is not cancelled). Dense clips (e.g. Bear bait mixed take) skip sparse normalize; intra-clip dynamics stay in the compressor. Job report: `compress_dialogue.sparse_dialogue` with `sparse_normalize_applied`, gains, and levels. Validated pre-ship on NAS fixtures Bear bait + C0021 (`research/evaluate_dialogue_leveling.py`, `validation/dialogue-leveling-prototype.json`). **Restart service** after pull. `service/leveler.py` (pre-compress speech-level-v1) remains unused — do not wire both.
 
@@ -1682,7 +1724,7 @@ Clean audio now levels whisper-heavy clips toward mixed-dialogue loudness withou
 
 **Panel (2026-09-11):** Duck settings gear menu no longer auto-opens after Add clean tracks / Apply; open it manually with ⚙ when needed.
 
-## Latest — whisper body (2026-09-11)
+## whisper body (2026-09-11)
 
 Enhance low end now boosts existing 150–500 Hz content for whispered dialogue; it replaces the previous upper-harmonic generator. Cog slider remains 0.2×–3×, default 1×. Nominal centre boost is about +1.6 / +6 / +12 dB at 0.2 / 1 / 3×, before linked peak attenuation. 1× now means the new normal setting, not the old algorithm. Four-times oversampled peak estimation applies global attenuation to −1 dBFS when needed; this is not a certified true-peak limiter. No pitch synthesis or recovery of absent bass; background low-frequency noise can also increase. Algorithm report: whisper-body-v1. Restart service, reload plugin and reconnect. Prior workflow review issues remain pending; real whispered-dialogue listening/native Premiere acceptance still required.
 

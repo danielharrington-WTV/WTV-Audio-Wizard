@@ -6,7 +6,9 @@ class Strict(BaseModel):
 
 class Stem(Strict):
     name: Literal['dialogue', 'music', 'effects']
-    target: float = Field(ge=-70, le=-6)
+    # Up to -3 dBFS since 0.7.3 (2026-10-15): the YouTube preset needs about
+    # -4 dBFS dialogue peaks to reach -14 LUFS.
+    target: float = Field(ge=-70, le=-3)
     duck: bool = False
 
 class Settings(Strict):
@@ -39,7 +41,19 @@ class Settings(Strict):
     # and full-voice takes come out at the same volume. The -12 dialogue stem
     # target above stays the compressor's peak ceiling.
     level_dialogue: bool = True
+    # Dialogue compressor (compressor.py), exposed 2026-10-15. Defaults are the
+    # values the compressor always used. (attack_ms/release_ms above are ducking.)
+    compressor_attack_ms: float = Field(default=3, ge=0.5, le=50)
+    compressor_release_ms: float = Field(default=60, ge=10, le=1000)
+    compressor_knee_db: float = Field(default=12, ge=0, le=24)
+    compressor_max_reduction_db: float = Field(default=24, ge=0, le=40)
     dialogue_level_dbfs: float = Field(default=-23, ge=-40, le=-12)
+    # Remove noise (service/denoise.py, 2026-10-15): a noise print learned with
+    # POST /v1/noise-profile, applied to the raw dialogue before anything else.
+    # None = off. Only with the raw-audio path (no neural cleanup, no separation).
+    denoise_profile_id: str | None = Field(default=None, pattern=r'^[0-9a-f]{32}$')
+    denoise_reduction_db: float = Field(default=12, ge=0, le=40)
+    denoise_threshold_db: float = Field(default=6, ge=-6, le=24)
     output_rate: Literal[44100, 48000, 96000] = 48000
 
     @property
@@ -57,6 +71,9 @@ class Settings(Strict):
             raise ValueError('Ambience-only requires ambience extraction without dialogue processing, music or ducking')
         if sorted(s.name for s in self.stems) != ['dialogue', 'effects', 'music']:
             raise ValueError('Exactly one dialogue, music and effects stem is required')
+        if self.denoise_profile_id and (self.enhancer != 'none' or self.separate_music or self.separate_ambience
+                                        or self.ambience_only or self.separator != 'bandit_v2'):
+            raise ValueError('Remove noise works on raw audio only: no neural cleanup and no stem extraction')
         return self
 
 class DeplosiveRequest(Strict):
@@ -69,6 +86,10 @@ class DeplosiveRequest(Strict):
 class LowEndRequest(Strict):
     intensity: float = Field(default=1.0, ge=0.2, le=3.0)
     # A whole-file effect (unlike DeplosiveRequest above) -- no seed needed.
+    asset_id: str = Field(pattern=r'^[0-9a-f]{32}$')
+
+class NoiseProfileRequest(Strict):
+    # An uploaded render of noise only (the panel's Learn noise: sequence In/Out).
     asset_id: str = Field(pattern=r'^[0-9a-f]{32}$')
 
 class QualityRequest(Strict):

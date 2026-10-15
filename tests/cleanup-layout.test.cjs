@@ -6,7 +6,7 @@ test('cleanup checkboxes use UXP-compatible flex rows, never grid',()=>{
  assert.match(container,/display:flex/);assert.doesNotMatch(container,/display:grid/);
  assert.match(css,/\.check-row\s*\{[^}]*display:flex/);
  const section=html.split('id="cleanDialogueSection"')[1].split('id="toggleLevelsStems"')[0];
- for(const id of ['mode','selectedDialogue','processInPlace','handlesEnabled','handleSeconds'])assert.ok(section.includes(`id="${id}"`),id);
+ for(const id of ['mode','selectedDialogue','processInPlace','handlesEnabled','handleFrames'])assert.ok(section.includes(`id="${id}"`),id);
 });
 test('Batch Process Dialogue processing steps live in the Main-tab Batch Process Options menu, in pipeline order, not in Options',()=>{
  const html=read('index.html');

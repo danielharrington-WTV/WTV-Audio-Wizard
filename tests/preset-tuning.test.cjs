@@ -11,8 +11,9 @@ const {PRESETS, FACTORY_DEFAULT_VALUES} = run(
   + '\nglobalThis.PRESETS = PRESETS; globalThis.FACTORY_DEFAULT_VALUES = FACTORY_DEFAULT_VALUES;');
 const full = id => ({...FACTORY_DEFAULT_VALUES, ...(PRESETS.find(p => p.id === id).defaults || {})});
 
-test('clip handles are on at 0.5 s for every built-in preset', () => {
-  for (const preset of PRESETS) { assert.equal(full(preset.id).handlesEnabled, true, preset.id); assert.equal(full(preset.id).handleSeconds, 0.5); }
+test('clip handles are on at 30 frames for every built-in preset', () => {
+  for (const preset of PRESETS) { assert.equal(full(preset.id).handlesEnabled, true, preset.id); assert.equal(full(preset.id).handleFrames, 30); }
+  assert.match(fs.readFileSync(require.resolve('../plugin/index.html'), 'utf8'), /<input id="handleFrames" type="number" value="30" min="1" max="300" step="1"/);
   assert.match(fs.readFileSync(require.resolve('../plugin/index.html'), 'utf8'), /<input id="handlesEnabled" type="checkbox" checked>/);
 });
 
@@ -30,7 +31,7 @@ test('Promo/Action, Interview and Camcorder are distinct and valid', () => {
   }
 });
 
-test('one-time migration resets the retuned presets and turns handles on elsewhere', () => {
+test('one-time migration resets the retuned presets, turns handles on elsewhere and moves handles to 30 frames', () => {
   const store = new Map(), saved = values => JSON.stringify({format: 'WTVAudioWizard settings', schema: 1, values});
   const key = id => `wtv-last-settings-v1:${id}`;
   store.set(key('promo'), saved({duck: 3})); store.set(key('stems'), saved({handlesEnabled: false, handleSeconds: 1, duck: 4}));
@@ -40,12 +41,23 @@ test('one-time migration resets the retuned presets and turns handles on elsewhe
     {allPresets: () => [...PRESETS, {id: 'custom-1'}], presetSettingsKey: key});
   box.migrate(localStore);
   assert.equal(store.has(key('promo')), false);
-  assert.deepEqual(JSON.parse(store.get(key('stems'))).values, {handlesEnabled: true, handleSeconds: 0.5, duck: 4});
+  assert.deepEqual(JSON.parse(store.get(key('stems'))).values, {handlesEnabled: true, duck: 4, handleFrames: 30});
   assert.equal(JSON.parse(store.get(key('custom-1'))).values.handlesEnabled, true);
   assert.equal(store.get(key('natural')), '{broken');
-  assert.equal(store.get('wtv-preset-defaults-revision'), '2');
+  assert.equal(store.get('wtv-preset-defaults-revision'), '3');
   store.set(key('promo'), saved({duck: 3})); box.migrate(localStore);
   assert.ok(store.has(key('promo')), 'runs once');
+});
+
+test('panels already on revision 2 keep their settings and only move handles to frames', () => {
+  const store = new Map([['wtv-preset-defaults-revision', '2']]), key = id => `wtv-last-settings-v1:${id}`;
+  store.set(key('promo'), JSON.stringify({values: {duck: 3, handlesEnabled: false, handleSeconds: 1}}));
+  const localStore = {getItem: k => store.has(k) ? store.get(k) : null, setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k)};
+  const box = run(slice('const PRESET_DEFAULTS_REVISION_KEY', 'migratePresetDefaults();') + '\nglobalThis.migrate = migratePresetDefaults;',
+    {allPresets: () => PRESETS, presetSettingsKey: key});
+  box.migrate(localStore);
+  assert.deepEqual(JSON.parse(store.get(key('promo'))).values, {duck: 3, handlesEnabled: false, handleFrames: 30});
+  assert.equal(store.get('wtv-preset-defaults-revision'), '3');
 });
 
 test("Don't use cached files marks job submissions fresh, and needs a service that understands it", () => {

@@ -1,5 +1,5 @@
 // The panel version is written in six places; they must agree. The service
-// has its own version (0.7.2), which Connect checks exactly, so a panel-only
+// has its own version (0.7.3), which Connect checks exactly, so a panel-only
 // release must not change it.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -18,13 +18,13 @@ test('panel version is the same in the manifest, the heading, saved settings, th
   assert.ok(plugin('local-api.js').includes(`panel v${version}. Confirm UXP Developer Tool lists version ${version}.`), 'network help');
 });
 
-test('Connect still expects service 0.7.2, independent of the panel version', () => {
-  assert.ok(plugin('main.js').includes("health.service_version !== '0.7.2'"));
+test('Connect still expects service 0.7.3, independent of the panel version', () => {
+  assert.ok(plugin('main.js').includes("health.service_version !== '0.7.3'"));
 });
 
 test('settings saved by an older panel version still load', () => {
   const {validate, capture} = require('../plugin/settings-file.js');
-  const saved = capture(id => ({checked: true, value: ({mode: 'per_clip', enhancer: 'gap_urgenet', handleSeconds: '0.5', dialogue: '-24', music: '-28', effects: '-30', duck: '10', speechThreshold: '-40', attack: '100', release: '500', loudnessTarget: '-24', loudnessTolerance: '1', peakFlag: '-6', peakMerge: '2', qualityThreshold: '1.5', rawBlend: '0', maxBoost: '8'})[id]}));
+  const saved = capture(id => ({checked: true, value: ({mode: 'per_clip', enhancer: 'gap_urgenet', handleFrames: '30', dialogue: '-24', music: '-28', effects: '-30', duck: '10', speechThreshold: '-40', attack: '100', release: '500', loudnessTarget: '-24', loudnessTolerance: '1', peakFlag: '-6', peakMerge: '2', qualityThreshold: '1.5', rawBlend: '0', maxBoost: '8', speechLevel: '-23', loudnessDelivery: 'broadcast', compAttack: '3', compRelease: '60', compKnee: '12', compMaxReduction: '24', musicPeakThreshold: '-30', musicPeakRatio: '3', noiseReduction: '12', noiseThreshold: '6'})[id]}));
   assert.equal(saved.plugin_version, version);
   assert.doesNotThrow(() => validate({...saved, plugin_version: '0.8.1'}));
   assert.doesNotThrow(() => validate({...saved, plugin_version: undefined}));

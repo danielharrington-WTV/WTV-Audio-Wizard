@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 import soundfile as sf
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
-from .schema import JobRequest, Settings, DeplosiveRequest, LowEndRequest, QualityRequest
+from .schema import JobRequest, Settings, DeplosiveRequest, LowEndRequest, NoiseProfileRequest, QualityRequest
 from .quality import Analyzer as QualityAnalyzer
 from .audio import read_audio, resample_audio, mix
 from .stage_cache import StageCache, identity, model_identity, digest_file
@@ -29,6 +29,7 @@ from .compressor import compress_dialogue, normalize_sparse_dialogue
 from .leveler import level_dialogue
 from .lowend import enhance_low_end
 from .deplosive import attenuate_pop
+from .denoise import learn_profile, remove_noise
 from .music import MusicAnalysis, analyze as analyze_music
 from .workspace import find_workspace
 from . import storage_cleanup
@@ -62,7 +63,7 @@ def _hash_files(*paths):
         digest.update(path.read_bytes())
     return digest.hexdigest()
 
-DSP_CODE_SHA256 = _hash_files(Path(__file__).with_name('deess.py'), Path(__file__).with_name('audio.py'), Path(__file__).with_name('compressor.py'))
+DSP_CODE_SHA256 = _hash_files(Path(__file__).with_name('deess.py'), Path(__file__).with_name('audio.py'), Path(__file__).with_name('compressor.py'), Path(__file__).with_name('denoise.py'))
 LOCK = threading.RLock()
 JOBS, CANCEL = {}, {}
 POOL = None
@@ -140,7 +141,7 @@ async def lifespan(app):
     await asyncio.to_thread(POOL.shutdown, wait=True, cancel_futures=True)
     WORKER.release_idle()
 
-app = FastAPI(title='WTVAudioWizard', version='0.7.2', lifespan=lifespan)
+app = FastAPI(title='WTVAudioWizard', version='0.7.3', lifespan=lifespan)
 
 # Who may use the API. Spelled out rather than ipaddress.is_private, which
 # also admits link-local, CGNAT-adjacent, documentation and other ranges.
@@ -206,7 +207,7 @@ def sidon_ready():
 
 @app.get('/v1/health')
 def health():
-    return {'status': 'ok', 'capabilities': ['grouped_model_batch_v1', 'dnsmos_quality_v1', 'sidon_restore_v1', 'fresh_jobs_v1'], 'api_version': 1, 'service_version': '0.7.2', 'models': [
+    return {'status': 'ok', 'capabilities': ['grouped_model_batch_v1', 'dnsmos_quality_v1', 'sidon_restore_v1', 'fresh_jobs_v1', 'noise_profile_v1'], 'api_version': 1, 'service_version': '0.7.3', 'models': [
         {'id': 'bandit_v2', 'default': True, 'available': bandit_ready(), 'native_rate': 48000, 'native_channels': 1, 'stereo_policy': 'independent_channels'},
         {'id': 'gap_urgenet', 'available': gap_ready(), 'task': 'raw_dialogue_cleanup'},
         {'id': 'mossformer2', 'available': mossformer_ready(), 'task': 'dialogue_cleanup'},
@@ -426,6 +427,43 @@ def lowend(body: LowEndRequest):
             ASSET_PINS[body.asset_id] -= 1
             if not ASSET_PINS[body.asset_id]: del ASSET_PINS[body.asset_id]
 
+# Noise prints are small (about 30 KB) and are kept until deleted by hand:
+# storage cleanup only removes names it recognises, and this folder is not one.
+def noise_profile_path(pid):
+    return ROOT / 'noise-profiles' / f'{pid}.json'
+
+def load_noise_profile(pid):
+    try:
+        return json.loads(noise_profile_path(pid).read_text())
+    except (OSError, ValueError):
+        return None
+
+@app.post('/v1/noise-profile')
+def noise_profile(body: NoiseProfileRequest):
+    """Learn noise: measure a noise print from an uploaded render of noise only
+    and keep it under a new profile id, which jobs pass as denoise_profile_id.
+    Synchronous; the upload itself is not needed afterwards."""
+    if not (ROOT / f'{body.asset_id}.json').is_file():
+        raise HTTPException(404, 'Unknown uploaded asset')
+    with LOCK:
+        ASSET_PINS[body.asset_id] = ASSET_PINS.get(body.asset_id, 0) + 1
+    try:
+        x, rate = sf.read(ROOT / f'{body.asset_id}.wav', dtype='float32', always_2d=True)
+        try:
+            profile = learn_profile(x, rate)
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+        pid = uuid.uuid4().hex
+        noise_profile_path(pid).parent.mkdir(exist_ok=True)
+        temporary = noise_profile_path(pid).with_suffix('.tmp')
+        temporary.write_text(json.dumps({**profile, 'profile_id': pid, 'created_at': time.time()}))
+        temporary.replace(noise_profile_path(pid))
+        summary = {k: profile[k] for k in ('sample_rate', 'channels', 'seconds', 'noise_rms_dbfs', 'variation_db')}
+        return {'profile_id': pid, 'summary': summary}
+    finally:
+        with LOCK:
+            ASSET_PINS[body.asset_id] -= 1
+            if not ASSET_PINS[body.asset_id]: del ASSET_PINS[body.asset_id]
 
 @app.delete('/v1/assets/{aid}')
 def delete_analysis_asset(aid: str):
@@ -450,8 +488,10 @@ def submit(body: JobRequest):
     if body.settings.enhancer == 'gap_urgenet' and not gap_ready():
         raise HTTPException(409, 'GAP-URGENet runtime/checkpoints missing; configure local-config.json')
     if (body.settings.enhancer == 'none' and not body.settings.dialogue_postprocess and not body.settings.deess_enabled
-            and not body.settings.deess_declick and not needs_separation):
-        raise HTTPException(422, 'Enable neural cleanup, level & compress, de-ess, de-click, or stem extraction')
+            and not body.settings.deess_declick and not needs_separation and not body.settings.denoise_profile_id):
+        raise HTTPException(422, 'Enable neural cleanup, level & compress, de-ess, de-click, remove noise, or stem extraction')
+    if body.settings.denoise_profile_id and load_noise_profile(body.settings.denoise_profile_id) is None:
+        raise HTTPException(404, 'Noise print not found on the service (it may be a different server, or it was deleted). Learn noise again.')
     metadata = []
     with LOCK:
         for track in body.tracks:
@@ -596,6 +636,17 @@ def run_job(jid):
                 timings['separation_seconds']=time.perf_counter()-t0
             stems['dialogue']=read_audio(ROOT/f'{body.tracks[0].asset_id}.wav',body.settings.output_rate)
         check()
+        denoise_report=None
+        if body.settings.denoise_profile_id:
+            t0=time.perf_counter()
+            update(jid,stage='removing noise',progress=40)
+            profile=load_noise_profile(body.settings.denoise_profile_id)
+            if profile is None: raise ValueError('Noise print not found on the service; learn noise again')
+            stems['dialogue'],denoise_report=remove_noise(stems['dialogue'],body.settings.output_rate,profile,
+                body.settings.denoise_reduction_db,body.settings.denoise_threshold_db)
+            denoise_report['profile_id']=body.settings.denoise_profile_id
+            timings['denoise_seconds']=time.perf_counter()-t0
+            check()
         if body.settings.enhancer != 'none':
             t0=time.perf_counter();name=body.settings.enhancer;cfg=CONFIG[name];mid=JOBS[jid]['model_ids'][name]
             source=sources['dialogue' if body.settings.separator=='provided_stems' else 'mixture']
@@ -645,7 +696,9 @@ def run_job(jid):
             dialogue_target=next(spec.target for spec in body.settings.stems if spec.name=='dialogue')
             update(jid,stage='compressing dialogue',progress=86)
             stems['dialogue'],compress_report=compress_dialogue(stems['dialogue'],body.settings.output_rate,
-                target_dbfs=dialogue_target,max_boost_db=body.settings.max_boost_db)
+                target_dbfs=dialogue_target,max_boost_db=body.settings.max_boost_db,
+                attack_ms=body.settings.compressor_attack_ms,release_ms=body.settings.compressor_release_ms,
+                knee_width_db=body.settings.compressor_knee_db,max_reduction_db=body.settings.compressor_max_reduction_db)
             stems['dialogue'],sparse_report=normalize_sparse_dialogue(stems['dialogue'],body.settings.output_rate,
                 target_peak_dbfs=dialogue_target,max_boost_db=body.settings.max_boost_db)
             compress_report['sparse_dialogue']=sparse_report
@@ -666,7 +719,7 @@ def run_job(jid):
         update(jid,stage='mixing',progress=95)
         report=mix(stems,body.settings,folder/'result')
         timings['mix_seconds']=time.perf_counter()-t0;timings['total_seconds']=time.perf_counter()-started
-        report.update(enhancement=enhancement,compress_dialogue=compress_report,deess=deess_report,
+        report.update(enhancement=enhancement,denoise=denoise_report,compress_dialogue=compress_report,deess=deess_report,
             deess_declick=declick_report,stage_cache=cache_status,workers=worker_status,timings=timings)
         check()
         if benchmark is not None:

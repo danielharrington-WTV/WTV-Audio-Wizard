@@ -31,7 +31,7 @@ function normalizeBaseUrl(value) {
 
 async function requestLocal(baseUrl, path, options = {}, transport = fetch) {
   const base = normalizeBaseUrl(baseUrl);
-  const route = /^\/v1\/(?:health|defaults|workers\/release|quality-jobs(?:\/[0-9a-f]{32})?|music-analysis|deplosive|lowend|assets(?:\/[0-9a-f]{32}(?:\/download)?)?|jobs(?:\/[0-9a-f]{32}(?:\/result\/(?:dialogue|music|effects|mix))?)?)$/;
+  const route = /^\/v1\/(?:health|defaults|workers\/release|quality-jobs(?:\/[0-9a-f]{32})?|music-analysis|noise-profile|deplosive|lowend|assets(?:\/[0-9a-f]{32}(?:\/download)?)?|jobs(?:\/[0-9a-f]{32}(?:\/result\/(?:dialogue|music|effects|mix))?)?)$/;
   if (!route.test(path)) throw new Error('Unexpected local service endpoint.');
   const url = base + path;
   const headers = {...(options.headers || {})};
@@ -46,7 +46,7 @@ async function requestLocal(baseUrl, path, options = {}, transport = fetch) {
     });
   } catch (error) {
     if (/manifest entry not found|permission denied to the url/i.test(String(error))) {
-      throw new Error('Network permission is still blocked in panel v0.8.5. Confirm UXP Developer Tool lists version 0.8.5. This build uses the broad network permission workaround; preserve the original UDT error for diagnosis: ' + String(error));
+      throw new Error('Network permission is still blocked in panel v0.8.7. Confirm UXP Developer Tool lists version 0.8.7. This build uses the broad network permission workaround; preserve the original UDT error for diagnosis: ' + String(error));
     }
     throw error;
   }
@@ -55,7 +55,7 @@ async function requestLocal(baseUrl, path, options = {}, transport = fetch) {
   if (response.url && response.url !== url) throw new Error('Unexpected redirect from the local service.');
   if (!response.ok) {
     const detail = await response.text();
-    if (response.status === 401) throw new Error('Service reached, but it still asks for the old pairing token. Update the service to v0.7.2 (git pull) and restart it, then connect again.');
+    if (response.status === 401) throw new Error('Service reached, but it still asks for the old pairing token. Update the service to v0.7.3 (git pull) and restart it, then connect again.');
     if (response.status === 403 && /Local client required|LAN client required/.test(detail)) throw new Error(`Service reached, but it refused this connection (${detail.trim()}). The service accepts only this computer and private LAN addresses; check the URL, and update/restart an older service that accepts only 127.0.0.1.`);
     throw new Error(`Service ${response.status}: ${detail}`);
   }

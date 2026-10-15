@@ -60,8 +60,11 @@ function placementGeometry(clip, frameTicks) {
 
 // Source trims are relative to the project item's start, not embedded timecode.
 // Missing/ambiguous bounds leave this clip on the existing exact-cut path.
-async function addHandles(clip, seconds, frameTicks) {
-  const unavailable = reason => { clip.handles = {version: 1, requested: seconds, head: 0, tail: 0, reason}; };
+// Handles are requested in whole frames of the sequence (2026-10-14, Dan:
+// default 30 per side). Without a known sequence frame rate, 30 fps is assumed.
+const FALLBACK_FRAME_TICKS = TICKS_PER_SECOND / 30;
+async function addHandles(clip, frames, frameTicks) {
+  const unavailable = reason => { clip.handles = {version: 2, requestedFrames: frames, head: 0, tail: 0, reason}; };
   try {
     const item = clip.item;
     const source = ppro.ClipProjectItem.cast(await item.getProjectItem());
@@ -81,14 +84,15 @@ async function addHandles(clip, seconds, frameTicks) {
     const start = Number(clip.start.ticks), end = Number(clip.end.ticks);
     if (![length, sourceIn, sourceOut].every(Number.isSafeInteger) || length <= 0 || sourceIn < 0 || sourceOut > length || Math.abs(sourceOut-sourceIn-(end-start)) > Math.max(1, frameTicks || 0)) return unavailable('Source bounds unavailable or retimed');
     // (Tolerance is one sequence frame: an off-grid clip, e.g. 970.9996 frames on the timeline over 971 source frames, is not retimed; live 2026-09-21, C0021.MP4.)
-    const requested = Math.round(seconds * TICKS_PER_SECOND);
+    const requested = frames * (frameTicks || FALLBACK_FRAME_TICKS);
     let head = Math.min(requested, sourceIn, start), tail = Math.min(requested, length-sourceOut);
     // Premiere snaps trims of video-backed clips to whole frames, so an exact
     // 0.5 s (14.985 frames at 29.97) came back different and failed the
     // read-back check (live, 2026-09-21). Floor each side to whole sequence
     // frames so every requested in/out/start/end stays on the frame grid.
     if (frameTicks) { head -= head % frameTicks; tail -= tail % frameTicks; }
-    clip.handles = {version: 1, requested: seconds, head: head/TICKS_PER_SECOND, tail: tail/TICKS_PER_SECOND,
+    const perFrame = frameTicks || FALLBACK_FRAME_TICKS;
+    clip.handles = {version: 2, requestedFrames: frames, head: head/TICKS_PER_SECOND, tail: tail/TICKS_PER_SECOND, headFrames: Math.round(head/perFrame), tailFrames: Math.round(tail/perFrame),
       sourceInTicks: String(sourceIn), sourceOutTicks: String(sourceOut), sourceDurationTicks: String(length),
       startTicks: String(start-head), endTicks: String(end+tail), inTicks: String(sourceIn-head), outTicks: String(sourceOut+tail)};
     if (!head && !tail) { clip.handles.reason = 'No source media beyond the cut'; return; }
@@ -429,8 +433,8 @@ async function validate(clips, {selectedOnly = false, requireNoTransitions = tru
   return enabled;
 }
 
-async function prepare(selectedOnly = false, {inPlace = false, handlesEnabled = false, handleSeconds = 0.5} = {}) {
-  if (handlesEnabled && (!Number.isFinite(handleSeconds) || handleSeconds <= 0 || handleSeconds > 2)) throw Error('Handles must be more than 0 and at most 2 seconds per side.');
+async function prepare(selectedOnly = false, {inPlace = false, handlesEnabled = false, handleFrames = 30} = {}) {
+  if (handlesEnabled && (!Number.isInteger(handleFrames) || handleFrames < 1 || handleFrames > 300)) throw Error('Handles must be a whole number of frames from 1 to 300 per side.');
   const project = await ppro.Project.getActiveProject();
   const sequence = project && await project.getActiveSequence();
   if (!sequence) throw new Error('Activate a sequence first.');
@@ -476,11 +480,11 @@ async function prepare(selectedOnly = false, {inPlace = false, handlesEnabled = 
     throw error;
   }
   if (handlesEnabled) for (const clip of context.clips) {
-    await addHandles(clip, handleSeconds, context.frameTicks);
+    await addHandles(clip, handleFrames, context.frameTicks);
     // Separate every geometry, including equal-length head/tail combinations.
     const h = clip.handles;
     clip.exportIdentity = JSON.stringify({version:1, signature:context.signature, handles:h, exportStart:clip.exportStartTicks, exportEnd:clip.exportEndTicks, mediaIn:clip.mediaInTicks||'0'});
-    clip.id += `-h1-${Math.round(handleSeconds*1000)}-${Number(clip.mediaInTicks||0).toString(36)}-${Number(clip.exportEndTicks).toString(36)}-${Number(h.sourceInTicks||0).toString(36)}-${Number(h.sourceOutTicks||0).toString(36)}`;
+    clip.id += `-h2-${handleFrames}f-${Number(clip.mediaInTicks||0).toString(36)}-${Number(clip.exportEndTicks).toString(36)}-${Number(h.sourceInTicks||0).toString(36)}-${Number(h.sourceOutTicks||0).toString(36)}`;
   }
   context.renderSequences = [];
   context.renderSequence = null;

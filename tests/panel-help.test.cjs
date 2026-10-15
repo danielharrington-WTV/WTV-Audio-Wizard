@@ -24,7 +24,7 @@ test('the folder button chooses when there is no folder, and Change re-chooses a
  assert.ok(html.includes('id="changeFolder"'));
 });
 test('every kept file goes through the WTVAudioWizard output folder; Full sequence no longer prompts for one (2026-10-05)',()=>{
- assert.equal((main.match(/\(await resolveOutputFolder\(context\)\)\?\.output/g)||[]).length,3);
+ assert.equal((main.match(/\(await resolveOutputFolder\(context\)\)\?\.output/g)||[]).length,4); // Fix pop, Extract ambience, Rebuild Speech, Remove noise
  const apply=main.slice(main.indexOf('async function doApply()'),main.indexOf('function workflowButtonState()'));
  assert.match(apply,/await resolveOutputFolder\(context\)/);assert.doesNotMatch(apply,/pickFolder\(/);
  const prepare=main.slice(main.indexOf('async function doPrepare()'),main.indexOf('async function doApply()'));

@@ -101,7 +101,8 @@ def _smooth_gains(block_gains, size, rate, attack_ms=ATTACK_MS, release_ms=RELEA
     return smoothed
 
 
-def _apply_peak_curve(x, rate, target_peak_dbfs, max_boost_db, max_reduction_db=MAX_REDUCTION_DB, use_rms_drive=False):
+def _apply_peak_curve(x, rate, target_peak_dbfs, max_boost_db, max_reduction_db=MAX_REDUCTION_DB, use_rms_drive=False,
+                      attack_ms=ATTACK_MS, release_ms=RELEASE_MS, knee_width_db=KNEE_WIDTH_DB):
     _, size = block_levels(x, rate)
     peaks = _block_peaks(x, size)
     peak_db = 20 * np.log10(np.maximum(peaks, 1e-15))
@@ -111,12 +112,12 @@ def _apply_peak_curve(x, rate, target_peak_dbfs, max_boost_db, max_reduction_db=
         drive_db = np.maximum(peak_db, rms_db + RMS_DRIVE_OFFSET_DB)
     else:
         drive_db = peak_db
-    knee_db = target_peak_dbfs - KNEE_WIDTH_DB
+    knee_db = target_peak_dbfs - knee_width_db
     block_gains = np.array([
         _peak_gain_db(db, target_peak_dbfs, knee_db, max_boost_db, max_reduction_db)
         for db in drive_db
     ], dtype=np.float64)
-    smoothed = _smooth_gains(block_gains, size, rate)
+    smoothed = _smooth_gains(block_gains, size, rate, attack_ms=attack_ms, release_ms=release_ms)
     centers = np.arange(len(smoothed)) * size + size / 2
     linear = 10 ** (np.interp(np.arange(len(x)), centers, smoothed) / 20)
     return (x * linear[:, None]).astype(x.dtype), smoothed
@@ -193,8 +194,11 @@ def compress_dialogue(x, rate, target_dbfs=-12, max_boost_db=8, max_reduction_db
     body_boost = float(max_boost_db)
     filtered = _highpass(x, rate)
     body, air = _split_bands(filtered, rate)
-    body, body_gains = _apply_peak_curve(body, rate, target_dbfs, body_boost, max_reduction_db, use_rms_drive=True)
-    air, air_gains = _apply_peak_curve(air, rate, target_dbfs, min(max_boost_air_db, body_boost / 4), max_reduction_db)
+    # attack/release/knee were accepted but ignored before 0.7.3 (module
+    # constants were used); they are now passed through. Defaults unchanged.
+    curve = dict(attack_ms=attack_ms, release_ms=release_ms, knee_width_db=knee_width_db)
+    body, body_gains = _apply_peak_curve(body, rate, target_dbfs, body_boost, max_reduction_db, use_rms_drive=True, **curve)
+    air, air_gains = _apply_peak_curve(air, rate, target_dbfs, min(max_boost_air_db, body_boost / 4), max_reduction_db, **curve)
     out = _apply_ceiling((body + air).astype(x.dtype), target_dbfs)
     _, size = block_levels(out, rate)
     out_peaks = _block_peaks(out, size)

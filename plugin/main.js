@@ -27,7 +27,12 @@ const PRESETS = [
   // Stem separation (2026-10-08): dialogue plus separate music and ambience /
   // sound-effects tracks. Dialogue still comes from neural cleanup of the raw
   // clip; Bandit v2 supplies the music and ambience stems.
-  {id:'stems',label:'Stem separation',defaults:{ambienceStem:true,musicStem:true}}];
+  {id:'stems',label:'Stem separation',defaults:{ambienceStem:true,musicStem:true}},
+  // YouTube (2026-10-15): about -14 LUFS integrated, YouTube's playback
+  // reference. Measured with the service's own leveler + compressor on a raw
+  // interview clip: speech level -16 and dialogue peaks -4 gave -14.1 LUFS,
+  // -2.6 dBTP. Music and ambience move up by the same 8 dB as dialogue.
+  {id:'youtube',label:'YouTube',defaults:{dialogue:-4,speechLevel:-16,music:-20,effects:-10,loudnessDelivery:'youtube',loudnessTarget:-14,loudnessTolerance:1,peakFlag:-2}}];
 const DEFAULT_PRESET = 'camcorder';
 const ACTIVE_PRESET_KEY = 'wtv-active-preset-v1';
 let activePreset = DEFAULT_PRESET;
@@ -54,8 +59,12 @@ const deplosive = require('./deplosive.js');
 // const lowend = require('./lowend.js'); // Enhance low end hidden in v0.8.1
 const muteTools = require('./mute-tools.js');
 const musicSelect = require('./music-select.js');
+const delivery = require('./delivery.js');
 const extractAmbience = require('./extract-ambience.js');
 const restoreSpeech = require('./restore-speech.js');
+const learnNoise = require('./learn-noise.js');
+const removeNoise = require('./remove-noise.js');
+const noisePrints = require('./noise-prints.js');
 const perClip = require('./per-clip.js');
 const {processBatch, saveManifest, validateOutputs} = require('./clip-batch.js');
 const {createPrefetch} = require('./prefetch.js');
@@ -105,7 +114,7 @@ function makeButtonDiv(el) {
 for (const id of ['toggleConnection', 'connect', 'runCleanDialogue', 'musicPass', 'fixPop',
   'checkQuality', 'toggleQuality', 'verifyLoudness', 'saveSettings', 'loadSettings', 'refreshDialogueTracks', 'tabMainBtn', 'tabOptionsBtn', 'reset', 'resetAllOptions', 'copyReport', 'cancel',
   'createPreset', 'deletePreset',
-  'extractAmbience', 'restoreSpeech', 'unmuteClips', 'selectMuted', 'selectMusic',
+  'extractAmbience', 'restoreSpeech', 'learnNoise', 'removeNoise', 'unmuteClips', 'selectMuted', 'selectMusic',
   'toggleProcessing', 'toggleCleanDialogue', 'toggleLevelsStems', 'toggleDucking', 'toggleLoudness', 'toggleChangedSettings', 'togglePresets', 'openDestinationFolder', 'changeFolder']) makeButtonDiv($(id));
 let musicContextRevision=0;
 let context, musicContext, activeAction, jobId, jobResult, busy = false, factory, availableModels = [];
@@ -128,6 +137,7 @@ let lastPopFixReport = null;
 let lastLowEndReport = null;
 let lastAmbienceReport = null;
 let lastRestoreReport = null;
+let lastNoiseReport = null;
 let lastUnmuteReport = null;
 let lastSelectMutedReport = null;
 let lastSelectMusicReport = null;
@@ -271,10 +281,10 @@ function reportError(error, actionName) {
   say(lastError.message);
 }
 function diagnosticReport() {
-  const report = ['WTVAudioWizard panel v0.8.5', `Panel menu: ${panelMenuState.installed ? 'installed' : 'not installed (' + panelMenuState.error + ')'} \u00b7 compact ${document.body.classList.contains('compact') ? 'on' : 'off'}`, `Mode: ${$('mode').value}`,
+  const report = ['WTVAudioWizard panel v0.8.7', `Panel menu: ${panelMenuState.installed ? 'installed' : 'not installed (' + panelMenuState.error + ')'} \u00b7 compact ${document.body.classList.contains('compact') ? 'on' : 'off'}`, `Mode: ${$('mode').value}`,
     `Dialogue: ${$('enableEnhancer').checked ? $('enhancer').value : 'raw (no model)'} \u00b7 level ${$('dialoguePostprocess').checked ? 'on' : 'off'} \u00b7 de-ess ${$('deess').checked ? 'on' : 'off'}`,
     `De-click: ${$('deessDeclick').checked}`,
-    `Handles: ${$('handlesEnabled').checked ? $('handleSeconds').value + ' s per side (per clip only)' : 'off'}`,
+    `Handles: ${$('handlesEnabled').checked ? $('handleFrames').value + ' frames per side (per clip only)' : 'off'}`,
     `Preset: ${presetLabel(activePreset)} \u00b7 Keep raw mix ${$('rawBlend').value}% \u00b7 Max level boost ${$('maxBoost').value} dB \u00b7 Don't use cached files ${noCache ? 'on' : 'off'}`,
     `Handle results: ${JSON.stringify(context?.clips?.filter(c=>c.handles).map(c=>({clip:c.name,...c.handles})) || [])}`,
     `Optional stems: ambience=${$('ambienceStem').checked}, music=${$('musicStem').checked}`,
@@ -294,6 +304,7 @@ function diagnosticReport() {
     lastLowEndReport ? `Enhance low end: ${JSON.stringify(lastLowEndReport)}` : '',
     lastAmbienceReport ? `Extract ambience: ${JSON.stringify(lastAmbienceReport)}` : '',
     lastRestoreReport ? `Rebuild Speech: ${JSON.stringify(lastRestoreReport)}` : '',
+    lastNoiseReport ? `Noise: ${JSON.stringify(lastNoiseReport)}` : '',
     lastUnmuteReport ? `Unmute: ${JSON.stringify(lastUnmuteReport)}` : '',
     lastSelectMutedReport ? `Select muted: ${JSON.stringify(lastSelectMutedReport)}` : '',
     lastSelectMusicReport ? `Select music: ${JSON.stringify(lastSelectMusicReport)}` : '',
@@ -358,11 +369,12 @@ function processingSummaryText() {
 }
 function syncCleanupControls() {
   $('handlesEnabled').disabled = $('mode').value !== 'per_clip';
-  $('handleSeconds').disabled = $('mode').value !== 'per_clip' || !$('handlesEnabled').checked;
+  $('handleFrames').disabled = $('mode').value !== 'per_clip' || !$('handlesEnabled').checked;
   for (const id of [...PROCESSING_STEP_IDS, 'autoMute']) $(id).disabled = busy;
   $('enhancer').disabled = busy || !$('enableEnhancer').checked;
   $('rawBlend').disabled = busy || !$('enableEnhancer').checked;
   $('maxBoost').disabled = busy || !$('dialoguePostprocess').checked;
+  for (const id of ['levelSpeech', 'speechLevel', 'compAttack', 'compRelease', 'compKnee', 'compMaxReduction']) $(id).disabled = busy || !$('dialoguePostprocess').checked;
   $('processingSummary').textContent = processingSummaryText();
   $('processingWarning').style.display = processingStepsSelected() ? 'none' : 'block';
   $('repairHelp').style.display = $('deessDeclick').checked ? 'block' : 'none';
@@ -383,6 +395,21 @@ function settings() {
   const boost = Number($('maxBoost').value);
   if (!Number.isFinite(boost) || boost < 0 || boost > 24) throw new Error('Max level boost must be 0 to 24 dB.');
   if ('max_boost_db' in factory) result.max_boost_db = boost;
+  // Speech level: leveler target before compression (Settings.dialogue_level_dbfs).
+  const speechLevel = Number($('speechLevel').value);
+  if (!Number.isFinite(speechLevel) || speechLevel < -40 || speechLevel > -12) throw new Error('Speech level must be -40 to -12 dBFS.');
+  if ('dialogue_level_dbfs' in factory) result.dialogue_level_dbfs = speechLevel;
+  else if (speechLevel !== -23) throw new Error('Restart the updated service to change Speech level.');
+  if ('level_dialogue' in factory) result.level_dialogue = $('levelSpeech').checked;
+  // Dialogue compressor (2026-10-15): sent only to a service that knows the fields.
+  for (const [id, key, min, max, fallback, label] of [
+    ['compAttack', 'compressor_attack_ms', 0.5, 50, 3, 'Compressor attack'], ['compRelease', 'compressor_release_ms', 10, 1000, 60, 'Compressor release'],
+    ['compKnee', 'compressor_knee_db', 0, 24, 12, 'Compressor knee'], ['compMaxReduction', 'compressor_max_reduction_db', 0, 40, 24, 'Max reduction']]) {
+    const value = Number($(id).value);
+    if (!Number.isFinite(value) || value < min || value > max) throw new Error(`${label} must be ${min} to ${max}.`);
+    if (key in factory) result[key] = value;
+    else if (value !== fallback) throw new Error(`Restart the updated service to change ${label}.`);
+  }
   result.dialogue_postprocess = $('dialoguePostprocess').checked;
   if ('deess' in factory) result.deess = $('deess').checked;
   else if ($('deess').checked !== result.dialogue_postprocess) throw new Error('Restart the updated service to switch Level and De-ess separately.');
@@ -449,13 +476,13 @@ function showSettings(s) {
 // this is only used to compute the "Changed from defaults" diagnostic list,
 // so a mismatch here just makes that list wrong, not the actual reset.
 const FACTORY_DEFAULT_VALUES = {
-  mode:'per_clip', enhancer:'gap_urgenet', handlesEnabled:true, handleSeconds:0.5, rawBlend:0, maxBoost:8, selectedDialogue:true, processInPlace:true,
+  mode:'per_clip', enhancer:'gap_urgenet', handlesEnabled:true, handleFrames:30, rawBlend:0, maxBoost:8, speechLevel:-23, loudnessDelivery:'broadcast', levelSpeech:true, compAttack:3, compRelease:60, compKnee:12, compMaxReduction:24, musicPeakThreshold:-30, musicPeakRatio:3, noiseReduction:12, noiseThreshold:6, selectedDialogue:true, processInPlace:true,
   enableEnhancer:true, dialoguePostprocess:true, deess:true, autoMute:true, deessDeclick:false, ambienceStem:false, musicStem:false, duckEffects:false,
   stripMusicVolume:true, compressMusicBed:true, dialogue:-12, music:-28, effects:-18, duck:10, speechThreshold:-40,
   attack:200, release:1200, loudnessTarget:-24, loudnessTolerance:1, peakFlag:-6, peakMerge:2, peakMarkers:true, qualityThreshold:1.5,
 };
 const CHANGED_SETTINGS_LABELS = {
-  mode:'Source mode', enhancer:'Dialogue model', handlesEnabled:'Add clip handles', handleSeconds:'Handle length (s)', rawBlend:'Keep raw mix (%)', maxBoost:'Max level boost (dB)',
+  mode:'Source mode', enhancer:'Dialogue model', handlesEnabled:'Add clip handles', handleFrames:'Handle length (frames)', rawBlend:'Keep raw mix (%)', maxBoost:'Max level boost (dB)', speechLevel:'Speech level (dBFS)', loudnessDelivery:'Delivery', levelSpeech:'Level speech before compressing', compAttack:'Compressor attack (ms)', compRelease:'Compressor release (ms)', compKnee:'Compressor knee (dB)', compMaxReduction:'Max reduction (dB)', musicPeakThreshold:'Music peak control (dB)', musicPeakRatio:'Music peak ratio', noiseReduction:'Noise reduction (dB)', noiseThreshold:'Noise threshold (dB)',
   selectedDialogue:'Use selected clip only', processInPlace:'Process in place', enableEnhancer:'Neural dialogue cleanup',
   dialoguePostprocess:'Level & compress', deess:'De-ess', autoMute:'Mute raw when done', deessDeclick:'De-click', ambienceStem:'Extract ambience stem',
   musicStem:'Extract music stem', duckEffects:'Also duck ambience', stripMusicVolume:'Remove clip Volume before ducking',
@@ -572,7 +599,7 @@ function setCompact(on) {
 }
 document.body.classList.toggle('compact', optionsUi.compact === true);
 const panelMenuState = panelMenu.createMenu({
-  entrypoints: uxp.entrypoints, panelId: 'wtvAudioWizard', version: '0.8.5',
+  entrypoints: uxp.entrypoints, panelId: 'wtvAudioWizard', version: '0.8.7',
   hooks: {
     click: id => $(id).click(),
     getCompact: () => document.body.classList.contains('compact'),
@@ -632,7 +659,7 @@ setActiveTab(optionsUi.activeTab === 'options' ? 'options' : 'main');
 showSettings(panelDefaults);
 $('loudnessTarget').value='-24'; $('loudnessTolerance').value='1';
 $('peakFlag').value='-6'; $('peakMerge').value='2'; $('peakMarkers').checked=true;
-$('handleSeconds').value='0.5';
+$('handleFrames').value='30';
 $('stripMusicVolume').checked = optionsUi.stripMusicVolume !== false;
 $('compressMusicBed').checked = optionsUi.compressMusicBed !== false;
 $('mode').value = 'per_clip';
@@ -715,21 +742,27 @@ function loadPreset(id) {
 // were retuned and clip handles turned on for every preset. Once per panel: the
 // three retuned presets drop their last-used settings so they start from the new
 // defaults; every other saved preset keeps its settings but gets handles on at 0.5 s.
+// Revision 3 (2026-10-14): handle length moved from seconds to frames, 30 by default.
 const PRESET_DEFAULTS_REVISION_KEY = 'wtv-preset-defaults-revision';
 const RETUNED_PRESETS = ['promo', 'interview', 'camcorder'];
 function migratePresetDefaults(store = localStorage) {
   let revision = 0;
   try { revision = Number(store.getItem(PRESET_DEFAULTS_REVISION_KEY)) || 0; } catch (_) { return; }
-  if (revision >= 2) return;
+  if (revision >= 3) return;
   for (const preset of allPresets()) {
     const key = presetSettingsKey(preset.id);
     try {
-      if (RETUNED_PRESETS.includes(preset.id)) { store.removeItem(key); continue; }
+      if (revision < 2 && RETUNED_PRESETS.includes(preset.id)) { store.removeItem(key); continue; }
       const data = JSON.parse(store.getItem(key) || 'null');
-      if (data && data.values) { data.values.handlesEnabled = true; data.values.handleSeconds = 0.5; store.setItem(key, JSON.stringify(data)); }
+      if (!data || !data.values) continue;
+      if (revision < 2) data.values.handlesEnabled = true;
+      // Revision 3 (2026-10-14): handles are set in frames; every saved
+      // preset moves to the new 30-frame default (the old value was seconds).
+      delete data.values.handleSeconds; data.values.handleFrames = 30;
+      store.setItem(key, JSON.stringify(data));
     } catch (_) { /* Leave unreadable saved settings to loadPreset's fallback. */ }
   }
-  try { store.setItem(PRESET_DEFAULTS_REVISION_KEY, '2'); } catch (_) {}
+  try { store.setItem(PRESET_DEFAULTS_REVISION_KEY, '3'); } catch (_) {}
 }
 migratePresetDefaults();
 renderPresetOptions();
@@ -740,6 +773,19 @@ $('presetSelect').addEventListener('change', () => {
   else loadPreset($('presetSelect').value);
 });
 for(const id of settingsFile.fieldIds) $(id).addEventListener('change',rememberSettings);
+// Delivery (2026-10-15): picking one fills in the three loudness fields;
+// editing any of them by hand switches it to Custom. Registered after the
+// generic listeners so the remembered settings include both.
+$('loudnessDelivery').addEventListener('change', () => {
+  const values = delivery.deliveryValues($('loudnessDelivery').value);
+  if (!values) return;
+  for (const [id, value] of Object.entries(values)) $(id).value = String(value);
+  rememberSettings();
+});
+for (const id of delivery.DELIVERY_FIELDS) $(id).addEventListener('change', () => {
+  $('loudnessDelivery').value = delivery.detectDelivery(Object.fromEntries(delivery.DELIVERY_FIELDS.map(f => [f, $(f).value])));
+  rememberSettings();
+});
 $('mode').addEventListener('change', () => { context = null; jobId = null; jobResult = null; $('musicPass').disabled = true; updateWorkflow(); updateActions(); });
 $('processInPlace').addEventListener('change', updateWorkflow);
 $('handlesEnabled').addEventListener('change', syncCleanupControls);
@@ -764,7 +810,7 @@ function action(id, fn) {
     dialogueSelector.setBusy(true);
     $('mode').disabled = true; $('cancel').disabled = false;
     for (const id of [...PROCESSING_STEP_IDS, 'enhancer', 'autoMute']) $(id).disabled = true;
-    for (const name of ['changeFolder', 'connect', 'runCleanDialogue', 'musicPass', 'fixPop', 'reset', 'extractAmbience', 'restoreSpeech', 'unmuteClips', 'selectMuted', 'selectMusic', 'saveSettings', 'loadSettings', 'verifyLoudness', 'checkQuality', 'createPreset', 'deletePreset']) $(name).disabled = true;
+    for (const name of ['changeFolder', 'connect', 'runCleanDialogue', 'musicPass', 'fixPop', 'reset', 'extractAmbience', 'restoreSpeech', 'learnNoise', 'removeNoise', 'unmuteClips', 'selectMuted', 'selectMusic', 'saveSettings', 'loadSettings', 'verifyLoudness', 'checkQuality', 'createPreset', 'deletePreset']) $(name).disabled = true;
     try { await fn(); } catch (error) { reportError(error, id); }
     finally {
       if (id === 'process' || id === 'musicPass' || id === 'runCleanDialogue' || id === 'verifyLoudness' || id === 'checkQuality') {
@@ -843,6 +889,8 @@ function updateActions() {
   $('fixPop').disabled = state.fixPop;
   $('extractAmbience').disabled = state.extractAmbience;
   $('restoreSpeech').disabled = state.restoreSpeech;
+  $('learnNoise').disabled = busy || !factory;
+  void refreshNoisePrint();
   $('unmuteClips').disabled = state.unmuteClips;
   $('selectMuted').disabled = state.selectMuted;
   $('selectMusic').disabled = busy; // Works offline, on any sequence.
@@ -859,7 +907,7 @@ action('connect', async () => {
   updateConnectionStatus('connecting');
   clientBase = normalizeBaseUrl($('baseUrl').value);
   const health = await (await request('/v1/health')).json();
-  if (health.service_version !== '0.7.2') throw new Error(`The service at ${clientBase} is v${health.service_version || 'unknown'}; this panel needs v0.7.2. Update the service (git pull) and restart it.`);
+  if (health.service_version !== '0.7.3') throw new Error(`The service at ${clientBase} is v${health.service_version || 'unknown'}; this panel needs v0.7.3. Update the service (git pull) and restart it.`);
   availableModels = health.models;
   serviceCapabilities = Array.isArray(health.capabilities) ? health.capabilities : [];
   factory = await (await request('/v1/defaults')).json();
@@ -1270,7 +1318,7 @@ async function doPrepare() {
   }
   context = null; jobId = null; jobResult = null;
   context = perClipMode
-    ? await perClip.prepare($('selectedDialogue').checked, {inPlace, handlesEnabled: $('handlesEnabled').checked, handleSeconds: Number($('handleSeconds').value)})
+    ? await perClip.prepare($('selectedDialogue').checked, {inPlace, handlesEnabled: $('handlesEnabled').checked, handleFrames: Number($('handleFrames').value)})
     : inPlace ? await host.useActive() : await host.cloneActive();
   const exportFolder = await resolveOutputFolder(context);
   if (!exportFolder) return;
@@ -1281,7 +1329,7 @@ async function doPrepare() {
     folderChangedSinceContext = false;
     for (const clip of context.clips) if (clip.handles) {
       const h = clip.handles;
-      say(`${clip.name}: handles ${h.head.toFixed(3)} s before / ${h.tail.toFixed(3)} s after${h.reason ? ' - '+h.reason : ''}.`);
+      say(`${clip.name}: handles ${h.headFrames ?? 0} frames before / ${h.tailFrames ?? 0} after (${h.head.toFixed(2)} s / ${h.tail.toFixed(2)} s)${h.reason ? ' - '+h.reason : ''}.`);
     }
     context.reuse = noCache ? null : await loadPreviousManifest(target.folder);
     if (noCache) say("Don't use cached files is on: exporting and processing every clip again.");
@@ -1519,7 +1567,8 @@ action('musicPass', async () => {
   say(`${duckLine} Normalizing music levels\u2026`);
   let norm;
   try {
-    norm=await normalizeMusic.run({say,check:()=>{
+    const peak={thresholdDb:Number($('musicPeakThreshold').value),ratio:Number($('musicPeakRatio').value)};
+    norm=await normalizeMusic.run({say,peak,check:()=>{
       if(cancelled) throw Error('Music normalization cancelled; ducking and any completed clips remain applied.');
     }});
   } catch(error) {
@@ -1527,7 +1576,7 @@ action('musicPass', async () => {
     throw new Error(`Ducking was applied, but normalizing music levels failed: ${error.message}`);
   }
   lastMusicReport={...lastMusicReport,normalized:true,normalized_clips:norm.clips};
-  say(`${duckLine} Levels normalized on ${norm.clips} clip(s): Broadcast multiband compressor at -12 dB output gain, then a 3:1 peak-control compressor above -30 dB (limiters bypassed); duck keyframes preserved.`);
+  say(`${duckLine} Levels normalized on ${norm.clips} clip(s): Broadcast multiband compressor at -12 dB output gain, then a ${$('musicPeakRatio').value}:1 peak-control compressor above ${$('musicPeakThreshold').value} dB (limiters bypassed); duck keyframes preserved.`);
   } finally {
     setCleanProgress(false);
   }
@@ -1570,6 +1619,59 @@ action('restoreSpeech', async () => {
     : result.muted ? ` ${result.muted} original${result.muted === 1 ? '' : 's'} muted; Unmute reverts.`
     : result.autoMute === false && result.succeeded ? ' Originals left audible (Mute raw when done is off).' : '';
   say(`Rebuilt speech for ${result.succeeded}/${result.clips} selected clip${result.clips === 1 ? '' : 's'}${result.trackAdded ? ' on a new Rebuilt speech track' : ''}.${muteText} Audition before delivery. Media is in the ${host.IMPORT_BIN_NAME} bin.${failureText}`);
+});
+// Learn noise / Remove noise (2026-10-15). The noise print is the service's
+// profile id, remembered per project (noise-prints.js); an unsaved project's
+// print lives in memory until the panel reloads.
+let noisePrint = null, sessionNoisePrint = null;
+async function noisePrintKey() {
+  try { return projectFolders.projectKey(await host.getProjectPath()); } catch (_) { return null; }
+}
+function storedNoisePrints() {
+  try { return localStorage.getItem(noisePrints.STORAGE_KEY) || '{}'; } catch (_) { return '{}'; }
+}
+async function refreshNoisePrint() {
+  const key = await noisePrintKey();
+  noisePrint = key ? noisePrints.printFor(storedNoisePrints(), key) : sessionNoisePrint;
+  $('noisePrintStatus').textContent = noisePrints.describe(noisePrint, at => new Date(at).toLocaleString([], {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}));
+  $('removeNoise').disabled = busy || !factory || !noisePrint;
+}
+action('learnNoise', async () => {
+  if (!factory) throw Error('Connect first');
+  if (!serviceCapabilities.includes('noise_profile_v1')) throw Error('This service has no Learn noise. Update it (git pull) and restart it, then Connect again.');
+  const check = () => { if (cancelled) throw new Error('Learn noise stopped. The previous noise print is unchanged.'); };
+  const learned = await learnNoise.run({fs, binary: uxp.storage.formats.binary, request, check, say, sleep});
+  const print = {profileId: learned.profileId, serviceUrl: clientBase, summary: learned.summary};
+  const key = await noisePrintKey();
+  if (key) { try { localStorage.setItem(noisePrints.STORAGE_KEY, noisePrints.remember(storedNoisePrints(), key, print)); } catch (_) {} }
+  else sessionNoisePrint = {...print, at: Date.now()};
+  lastNoiseReport = {learned};
+  await refreshNoisePrint();
+  const s = learned.summary || {};
+  say(`Noise print learned from ${Number(s.seconds).toFixed(1)} s (${Math.round(s.noise_rms_dbfs)} dBFS)${key ? ' and saved for this project' : '; save the project to keep it after a reload'}. Select clips, then click Remove noise.`);
+});
+action('removeNoise', async () => {
+  if (!factory) throw Error('Connect first');
+  await refreshNoisePrint();
+  if (!noisePrint) throw Error('No noise print for this project. Mark In/Out around noise only, then click Learn noise.');
+  const chosen = removeNoise.noiseSettings(factory, noisePrint.profileId, {reduction: Number($('noiseReduction').value), threshold: Number($('noiseThreshold').value)});
+  const folder = (await resolveOutputFolder(context))?.output;
+  if (!folder) return;
+  const check = () => { if (cancelled) throw new Error('Remove noise stopped. Clips already denoised stay on the Noise removed track.'); };
+  let result;
+  try {
+    result = await removeNoise.run({autoMute: $('autoMute').checked, fs, binary: uxp.storage.formats.binary, request, check, say, sleep, outputFolder: folder, settings: chosen});
+  } catch (error) {
+    if (/Noise print not found/.test(error.message)) error.message += ' (This noise print was learned on ' + (noisePrint.serviceUrl || 'another service') + '.)';
+    throw error;
+  }
+  lastNoiseReport = {removed: result};
+  const failed = result.results.filter(r => r.error);
+  const failureText = failed.length ? ` Failed: ${failed.map(r => `"${r.name}" (${r.error})`).join('; ')}` : '';
+  const muteText = result.muteError ? ` Could not mute the originals (${result.muteError}); mute them before playback.`
+    : result.muted ? ` ${result.muted} original${result.muted === 1 ? '' : 's'} muted; Unmute reverts.`
+    : result.autoMute === false && result.succeeded ? ' Originals left audible (Mute raw when done is off).' : '';
+  say(`Removed noise on ${result.succeeded}/${result.clips} selected clip${result.clips === 1 ? '' : 's'} (${chosen.denoise_reduction_db} dB)${result.trackAdded ? ' on a new Noise removed track' : ''}.${muteText} Audition before delivery. Media is in the ${host.IMPORT_BIN_NAME} bin.${failureText}`);
 });
 action('unmuteClips', async () => {
   const result = await muteTools.unmute({say});

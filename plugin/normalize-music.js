@@ -48,19 +48,27 @@ for(const band of [1,2,3,4]) broadcastPreset.params.find(param=>param.name===`Ga
 // back before writing each param, and verify() re-reads every param after
 // Apply -- if Premiere's real behavior doesn't match this decode, verify()
 // throws and the clip rolls back rather than silently shipping wrong audio.
-const peakPreset=(()=>{
+//
+// Threshold and ratio are adjustable since 2026-10-15 (Options > Ducking >
+// Music peak control). The defaults (-30 dB, 3:1) still write the exact
+// captured values above; other settings use the same two decoded mappings.
+const PEAK_DEFAULTS={thresholdDb:-30,ratio:3};
+function makePeakPreset({thresholdDb=PEAK_DEFAULTS.thresholdDb,ratio=PEAK_DEFAULTS.ratio}={}) {
+  if(!Number.isFinite(thresholdDb)||thresholdDb<-60||thresholdDb>0) throw Error('Music peak control threshold must be -60 to 0 dB.');
+  if(!Number.isFinite(ratio)||ratio<1||ratio>30) throw Error('Music peak control ratio must be 1 to 30.');
   const clone=JSON.parse(JSON.stringify(broadcastPreset));
-  clone.name='Peak control (3:1 above -30 dB)';
+  clone.name=`Peak control (${ratio}:1 above ${thresholdDb} dB)`;
   clone.output_gain_db=0;
   const param=name=>clone.params.find(p=>p.name===name);
   const ratio3to1=broadcastPreset.params.find(p=>p.name==='Ratio 1').value;
   param('Output Gain').value=0.5;
   for(const band of [1,2,3,4]) {
-    param(`Threshold ${band}`).value=0.5;
-    param(`Ratio ${band}`).value=ratio3to1;
+    param(`Threshold ${band}`).value=(thresholdDb+60)/60;
+    param(`Ratio ${band}`).value=ratio===3?ratio3to1:(ratio-1)/29;
   }
   return clone;
-})();
+}
+const peakPreset=makePeakPreset();
 
 // Order matters: this is the actual signal-chain order the stages are
 // inserted and configured in (Broadcast, then Peak control).
@@ -108,7 +116,8 @@ async function verify(component, preset=broadcastPreset) {
       throw Error(`${preset.name} compressor verification failed: ${setting.name}`);
   }
 }
-async function run({check=()=>{},say=()=>{}}={}) {
+async function run({check=()=>{},say=()=>{},peak=PEAK_DEFAULTS}={}) {
+  const STAGES=[broadcastPreset,makePeakPreset(peak)];
   const project=await ppro.Project.getActiveProject(), sequence=project && await project.getActiveSequence();
   if(!sequence) throw Error('Open a sequence and select music clips.');
   const sequenceId=sequence.guid.toString(),selected=[];
@@ -218,4 +227,4 @@ async function run({check=()=>{},say=()=>{}}={}) {
   }
   return {clips:completed,stages:STAGES.map(preset=>({preset:preset.name,output_gain_db:preset.output_gain_db}))};
 }
-module.exports={run,plan,verify,broadcastPreset,peakPreset,STAGES};
+module.exports={run,plan,verify,broadcastPreset,peakPreset,makePeakPreset,PEAK_DEFAULTS,STAGES};

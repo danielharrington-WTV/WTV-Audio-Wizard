@@ -116,3 +116,18 @@ test('regression: every ComponentParam value action is created inside a transact
     'building it ahead of time and committing it later is what threw "The script object is ' +
     'no longer valid" on real Premiere 26.5.1 (see per-clip.js\'s setClipGains fix)');
 });
+
+test('music Peak control threshold and ratio are adjustable; defaults keep the captured values (2026-10-15)',async()=>{
+  const s=setup();
+  const def=s.api.makePeakPreset(), p=name=>def.params.find(x=>x.name===name).value;
+  const ratio3=preset.params.find(x=>x.name==='Ratio 1').value;
+  for(const band of [1,2,3,4]) { assert.equal(p(`Threshold ${band}`),0.5); assert.equal(p(`Ratio ${band}`),ratio3); }
+  assert.equal(JSON.stringify(def),JSON.stringify(s.api.peakPreset));
+  const custom=s.api.makePeakPreset({thresholdDb:-24,ratio:4}), c=name=>custom.params.find(x=>x.name===name).value;
+  for(const band of [1,2,3,4]) { assert.equal(c(`Threshold ${band}`),0.6); assert.ok(Math.abs(c(`Ratio ${band}`)-3/29)<1e-12); }
+  assert.equal(custom.name,'Peak control (4:1 above -24 dB)');
+  const result=await s.api.run({peak:{thresholdDb:-24,ratio:4}});
+  assert.equal(result.stages[1].preset,'Peak control (4:1 above -24 dB)');
+  await s.api.verify(s.a.chain.parts[2],custom);
+  for(const bad of [{thresholdDb:1,ratio:3},{thresholdDb:-30,ratio:0.5},{thresholdDb:NaN,ratio:3}]) assert.throws(()=>s.api.makePeakPreset(bad),/Music peak control/);
+});
